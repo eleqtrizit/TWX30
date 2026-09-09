@@ -154,6 +154,15 @@ internal static class McpToolSchema
         },
         new()
         {
+            Name = "disconnect_server",
+            Description = "Disconnect from the game server (same as the Disconnect menu action). Returns a tool error when there is no active connection.",
+            JsonRpcMethod = "mtc.disconnectServer",
+            ReadOnly = false,
+            Parameters = NoParameters,
+            RequiredParameters = [],
+        },
+        new()
+        {
             Name = "write_script",
             Description = "Create or overwrite a TWX script source file. The 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts' or 'include/header.ts'); forward slashes are accepted; paths escaping the scripts root are rejected.",
             JsonRpcMethod = "mtc.writeScript",

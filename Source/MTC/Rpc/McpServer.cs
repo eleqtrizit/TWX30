@@ -241,7 +241,8 @@ internal sealed class McpServer
             },
             serverInfo = new { name = ServerName, version = ServerVersion },
             instructions = "MTC Trade Wars proxy MCP endpoint. Read tools inspect live game state and the local database. " +
-                           "Connection-dependent tools return 'Connect to server, first.' until connect_server succeeds. " +
+                           "Connection-dependent tools return 'Connect to server, first.' until connect_server succeeds; " +
+                           "disconnect_server ends the session. " +
                            "Script authoring tools (read_script, write_script, edit_script) read and write TWX script files; " +
                            "their 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts'), forward " +
                            "slashes are accepted, and any path escaping the scripts root is rejected. " +

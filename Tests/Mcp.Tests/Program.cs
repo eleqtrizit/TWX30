@@ -178,6 +178,7 @@ async Task McpToolsListAdvertisesAllTools()
             "run_mombot_command",
             "run_script",
             "connect_server",
+            "disconnect_server",
             "write_script",
             "edit_script",
             "read_script",
@@ -305,7 +306,7 @@ async Task JsonRpcHttpPostStillWorks()
 async Task ToolSchemaMapsEveryToolOntoJsonRpc()
 {
     McpToolDescriptor[] tools = McpToolSchema.DescribeTools().ToArray();
-    Assert(tools.Length == 14, $"expected 14 tools, got {tools.Length}");
+    Assert(tools.Length == 15, $"expected 15 tools, got {tools.Length}");
     foreach (McpToolDescriptor tool in tools)
     {
         Assert(tool.JsonRpcMethod.StartsWith("mtc.", StringComparison.Ordinal), $"{tool.Name} must map onto an mtc.* method");
@@ -313,7 +314,7 @@ async Task ToolSchemaMapsEveryToolOntoJsonRpc()
         Assert(McpToolSchema.BuildInputSchema(tool) != null, $"{tool.Name} needs an input schema");
     }
 
-    Assert(tools.Count(tool => !tool.ReadOnly) == 7, "exactly the seven mutating tools are marked non-readonly");
+    Assert(tools.Count(tool => !tool.ReadOnly) == 8, "exactly the eight mutating tools are marked non-readonly");
 }
 
 async Task RunAndStopScriptHandlersWork()
@@ -594,6 +595,7 @@ internal sealed class StubBridge
             RunScriptAsync = script => Task.FromResult(MtcRpcActionResult.Ok($"script started: {script}")),
             StopScriptAsync = (_, _) => Task.FromResult(MtcRpcActionResult.Ok("script stopped")),
             ConnectServerAsync = () => Task.FromResult(MtcRpcActionResult.Ok("connected: test")),
+            DisconnectServerAsync = () => Task.FromResult(MtcRpcActionResult.Ok("disconnected")),
             WriteScriptAsync = (path, content) => Task.FromResult(MtcRpcActionResult.Ok($"write: {path}")),
             EditScriptAsync = (path, _, _, _) => Task.FromResult(MtcRpcActionResult.Ok($"edit: {path}")),
             ReadScriptAsync = (path, offset, limit) => Task.FromResult(new MtcScriptReadResult

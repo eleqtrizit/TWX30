@@ -45,6 +45,7 @@ internal sealed class MtcRpcBridge
     public required Func<string, Task<MtcRpcActionResult>> RunScriptAsync { get; init; }
     public required Func<int?, string?, Task<MtcRpcActionResult>> StopScriptAsync { get; init; }
     public required Func<Task<MtcRpcActionResult>> ConnectServerAsync { get; init; }
+    public required Func<Task<MtcRpcActionResult>> DisconnectServerAsync { get; init; }
     public required Func<string, string, Task<MtcRpcActionResult>> WriteScriptAsync { get; init; }
     public required Func<string, string, string, bool, Task<MtcRpcActionResult>> EditScriptAsync { get; init; }
     public required Func<string, int, int, Task<MtcScriptReadResult>> ReadScriptAsync { get; init; }

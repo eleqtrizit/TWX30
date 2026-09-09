@@ -99,6 +99,7 @@ public partial class MainWindow
             RunScriptAsync = RunMtcRpcScriptAsync,
             StopScriptAsync = StopMtcRpcScriptAsync,
             ConnectServerAsync = ConnectMtcRpcServerAsync,
+            DisconnectServerAsync = DisconnectMtcRpcServerAsync,
             WriteScriptAsync = WriteMtcRpcScriptFileAsync,
             EditScriptAsync = EditMtcRpcScriptFileAsync,
             ReadScriptAsync = ReadMtcRpcScriptFileAsync,
@@ -418,6 +419,26 @@ public partial class MainWindow
                 ["port"] = _state.Port.ToString(),
             })
             : MtcRpcActionResult.Fail("Connection failed; check the MTC terminal for the reason.");
+    }
+
+    private async Task<MtcRpcActionResult> DisconnectMtcRpcServerAsync()
+    {
+        bool connected = await InvokeMtcRpcUiAsync(() =>
+            Task.FromResult(_telnet.IsConnected || (_gameInstance?.IsConnected ?? false))).ConfigureAwait(false);
+        if (!connected)
+            return MtcRpcActionResult.Fail("Not connected to a server.");
+
+        await InvokeMtcRpcUiAsync(async () =>
+        {
+            await OnDisconnectAsync().ConfigureAwait(true);
+            return string.Empty;
+        }).ConfigureAwait(false);
+
+        bool stillConnected = await InvokeMtcRpcUiAsync(() =>
+            Task.FromResult(_telnet.IsConnected || (_gameInstance?.IsConnected ?? false))).ConfigureAwait(false);
+        return stillConnected
+            ? MtcRpcActionResult.Fail("Disconnect did not complete; check the MTC terminal.")
+            : MtcRpcActionResult.Ok("Disconnected from the game server.");
     }
 
     private Task<bool> ApproveMtcRpcActionAsync(string action, string details)

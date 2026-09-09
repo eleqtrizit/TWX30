@@ -423,6 +423,11 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 return await _bridge.ConnectServerAsync().ConfigureAwait(false);
             }
 
+            case "mtc.disconnectServer":
+            {
+                return await _bridge.DisconnectServerAsync().ConfigureAwait(false);
+            }
+
             case "mtc.readScript":
             {
                 string path = ReadString(parameters, "path", required: true);
@@ -495,6 +500,7 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 "mtc.unsubscribe",
                 "mtc.proposeCommand",
                 "mtc.connectServer",
+                "mtc.disconnectServer",
                 "mtc.sendCommand",
                 "mtc.runMombotCommand",
                 "mtc.runScript",
