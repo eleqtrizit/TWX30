@@ -62,3 +62,6 @@ tradewars-copilot/
 # Local AI agent session logs
 .pi/
 __pycache__/
+
+# Agent gameplay notes
+GAMEPLAY.md
