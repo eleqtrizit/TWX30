@@ -397,6 +397,12 @@ public partial class MainWindow
                 ["port"] = _state.Port.ToString(),
             });
 
+        string connectHost = _state.EmbeddedProxy
+            ? _embeddedGameConfig?.Host ?? _state.Host
+            : _state.Host;
+        if (string.IsNullOrWhiteSpace(connectHost))
+            return MtcRpcActionResult.Fail("No connect address configured; set the server and port in MTC first.");
+
         await InvokeMtcRpcUiAsync(async () =>
         {
             await OnConnectAsync().ConfigureAwait(true);

@@ -196,7 +196,7 @@ internal static class GameAgentToolRegistry
         {
             ToolName = "propose_command",
             Success = true,
-            WouldRequireApproval = true,
+            WouldRequireApproval = false,
             Message = $"Proposed command only, not sent: {command}",
         };
 
