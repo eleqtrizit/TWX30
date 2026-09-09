@@ -21,11 +21,12 @@ public partial class MainWindow
                 return;
 
             _jsonRpcServer ??= new MtcJsonRpcServer(BuildMtcRpcBridge());
+            int configuredPort = MtcStartupFlags.JsonRpcPortOverride ?? AppPreferences.NormalizeJsonRpcPort(jsonRpcPrefs.Port);
             _jsonRpcServer.ApplyOptions(new MtcJsonRpcServerOptions
             {
                 Enabled = shouldEnable,
                 BindAddress = AppPreferences.NormalizeJsonRpcBindAddress(jsonRpcPrefs.BindAddress),
-                Port = AppPreferences.NormalizeJsonRpcPort(jsonRpcPrefs.Port),
+                Port = configuredPort,
             });
         }
         catch (Exception ex)
@@ -33,7 +34,41 @@ public partial class MainWindow
             Core.GlobalModules.DebugLog($"[MTC.JsonRpc] failed to apply preferences: {ex}\n");
             _parser.Feed($"\x1b[1;31m[JSON-RPC failed: {ex.Message}]\x1b[0m\r\n");
             _buffer.Dirty = true;
+            if (MtcStartupFlags.InStartup)
+                FailStartupOnServerConflict(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Ends the application when the JSON-RPC listener cannot start during startup, which
+    /// means another MTC copy (or another process) already owns the configured port. Announces
+    /// a visible countdown so agents watching the stream see the failure before exit.
+    /// </summary>
+    /// <param name="reason">The bind failure message shown to the player</param>
+    private void FailStartupOnServerConflict(string reason)
+    {
+        _ = Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            _parser.Feed($"\x1b[1;31m[MTC JSON-RPC] {reason}]\x1b[0m\r\n");
+            _parser.Feed("\x1b[1;31m[MTC JSON-RPC] MTC will exit. Countdown started; close this dialog to exit immediately.]\x1b[0m\r\n");
+            _buffer.Dirty = true;
+            _ = ShowMessageAsync(
+                "MTC JSON-RPC",
+                $"{reason}\n\nMTC is exiting because the JSON-RPC port is already in use.\n" +
+                "MTC exits automatically when the countdown finishes; press OK to exit now.");
+            const int countdownSeconds = 10;
+            for (int remaining = countdownSeconds; remaining > 0; remaining--)
+            {
+                _parser.Feed($"\x1b[1;31m[MTC JSON-RPC] Exiting in {remaining} second{(remaining == 1 ? string.Empty : "s")}.]\x1b[0m\r\n");
+                _buffer.Dirty = true;
+                await Task.Delay(1000).ConfigureAwait(true);
+            }
+
+            _parser.Feed("\x1b[1;31m[MTC JSON-RPC] Exiting now.]\x1b[0m\r\n");
+            _buffer.Dirty = true;
+            if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                desktop.Shutdown();
+        });
     }
 
     private EmbeddedMtcJsonRpcConfig GetCurrentJsonRpcConfig()

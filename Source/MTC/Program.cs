@@ -2,7 +2,7 @@ using Avalonia;
 using TWXProxy.Core;
 
 if (MTC.UnixAutoDetach.TryRelaunchDetached(args))
-    return;
+    return 0;
 
 // MTC is a GUI application — suppress all Console output so diagnostic
 // Console.WriteLine calls in Core do not leak to the terminal.
@@ -12,6 +12,19 @@ MTC.MtcStartupFlags.Parse(args);
 
 var prefs = MTC.AppPreferences.Load();
 MTC.AppPaths.SetConfiguredProgramDir(prefs.ProgramDirectory);
+MTC.AppPaths.EnsureDebugLogDir();
+
+if (MTC.MtcStartupFlags.FailImmediately)
+{
+    int port = MTC.MtcStartupFlags.JsonRpcPortOverride ?? MTC.AppPreferences.NormalizeJsonRpcPort(prefs.JsonRpcPort);
+    if (MTC.MtcStartupFlags.IsPortInUse(prefs.JsonRpcBindAddress, port))
+    {
+        Console.Error.WriteLine(
+            $"MTC: JSON-RPC port {port} is already in use by another MTC instance or process " +
+            "(--fail-immediately). Not starting.");
+        return 1;
+    }
+}
 GlobalModules.ProgramDir = MTC.AppPaths.ProgramDir;
 GlobalModules.PreferPreparedVm = prefs.PreparedVmEnabled;
 GlobalModules.EnableVmMetrics = prefs.VmMetricsEnabled;
@@ -56,7 +69,7 @@ TaskScheduler.UnobservedTaskException += (_, e) =>
     }
 };
 
-AppBuilder.Configure<MTC.App>()
+return AppBuilder.Configure<MTC.App>()
     .UsePlatformDetect()
     .WithInterFont()
     .LogToTrace()

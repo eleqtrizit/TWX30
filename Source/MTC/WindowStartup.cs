@@ -99,7 +99,9 @@ public partial class MainWindow
         SizeChanged += (_, _) => OnMainWindowSizeChanged();
 
         ApplyDebugLoggingPreferences();
+        MtcStartupFlags.InStartup = true;
         ApplyJsonRpcPreferences();
+        MtcStartupFlags.InStartup = false;
         ApplyRedAlertPreference();
         RebuildRecentMenu();
         RebuildProxyMenu();
