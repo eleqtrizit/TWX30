@@ -401,20 +401,20 @@ internal sealed class MtcJsonRpcServer : IDisposable
 
             case "mtc.proposeCommand":
             {
-                string command = ReadString(parameters, "command", required: true);
+                string command = ReadString(parameters, "command", required: true, allowEmpty: true);
                 return GameAgentToolRegistry.ProposeCommand(command);
             }
 
             case "mtc.sendCommand":
             {
-                string command = ReadString(parameters, "command", required: true);
+                string command = ReadString(parameters, "command", required: true, allowEmpty: true);
                 bool appendEnter = ReadBool(parameters, "appendEnter", true);
                 return await _bridge.SendCommandAsync(command, appendEnter).ConfigureAwait(false);
             }
 
             case "mtc.sendAndWait":
             {
-                string command = ReadString(parameters, "command", required: true);
+                string command = ReadString(parameters, "command", required: true, allowEmpty: true);
                 bool appendEnter = ReadBool(parameters, "appendEnter", true);
                 double timeoutSeconds = ReadDouble(parameters, "timeoutSeconds", 8, 0.5, 90);
                 return await _bridge.SendAndWaitAsync(command, appendEnter, timeoutSeconds).ConfigureAwait(false);
@@ -619,10 +619,12 @@ internal sealed class MtcJsonRpcServer : IDisposable
         throw new MtcRpcException(-32602, $"Parameter '{name}' must be a boolean.");
     }
 
-    private static string ReadString(JsonElement? parameters, string name, bool required)
+    private static string ReadString(JsonElement? parameters, string name, bool required, bool allowEmpty = false)
     {
         string? value = TryReadString(parameters, name);
-        if (required && string.IsNullOrWhiteSpace(value))
+        if (required && value == null)
+            throw new MtcRpcException(-32602, $"Parameter '{name}' is required.");
+        if (required && !allowEmpty && string.IsNullOrWhiteSpace(value))
             throw new MtcRpcException(-32602, $"Parameter '{name}' is required.");
         return value ?? string.Empty;
     }

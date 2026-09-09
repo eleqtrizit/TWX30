@@ -20,16 +20,27 @@ Build details, project layout, and tooling notes: see `Source/README.md`.
 
 When you (the agent) need the MTC app running (e.g. to use the `mtc_*` tools):
 
-1. **Start exactly one detached copy:**
+1. **Start exactly one detached copy, with the required flags:**
    ```bash
-   nohup $(HOME)/.dotnet/dotnet run --project Source/MTC/MTC.csproj >/dev/null 2>&1 &
+   nohup "$HOME/.dotnet/dotnet" run --project Source/MTC/MTC.csproj -- --mcp --agent-mode >/dev/null 2>&1 &
    ```
-   Run this command once, then verify with `pgrep` that a single copy is up.
-   Note: on macOS/Linux the app self-relaunches itself detached once at startup
-   (`UnixAutoDetach`) — this is normal and results in one detached copy. Wait a
-   moment and re-check `pgrep` before concluding anything is wrong.
+   Plain `dotnet run` (no flags) starts the UI but **no MCP server on port 7623** —
+   every `mtc_*` tool call fails with "fetch failed". `--mcp` opens the MCP
+   endpoint; `--agent-mode` suppresses dialogues and enables server observation.
 
-2. **NEVER set up respawn logic. This means:**
+2. **Wait for the listener, not just the process.** First run builds (~10-15s),
+   then the app self-relaunches itself detached once (`UnixAutoDetach`) — normal.
+   Confirm readiness with:
+   ```bash
+   lsof -iTCP:7623 -sTCP:LISTEN
+   ```
+   A check right after launch will show nothing; that's the build, not a failure.
+
+3. **Refresh the MCP gateway after a restart.** The gateway can cache
+   "mtc unavailable"; if a tool call fails with "Server mtc not available",
+   call `mcp({ connect: "mtc" })` once, then retry.
+
+4. **NEVER set up respawn logic. This means:**
    - No `while`/`until` loops that relaunch the app when it exits.
    - No watchdog/retry wrappers (`while true; do dotnet run ...; sleep N; done`).
    - No `dotnet watch` (`make debug`) for normal runs — it relaunches the app on
