@@ -33,6 +33,7 @@ var tests = new (string Name, Func<Task> Body)[]
     ("MCP GET without SSE accept returns 405", McpGetWithoutSseAcceptReturns405),
     ("MCP SSE stream pushes game events to the agent", McpSseStreamPushesGameEvents),
     ("MCP SSE stream pushes script state changes", McpSseStreamPushesScriptState),
+    ("MCP SSE stream pushes script runtime errors as scriptState error", McpSseStreamPushesScriptRuntimeErrors),
 };
 
 int failed = 0;
@@ -460,6 +461,46 @@ async Task McpSseStreamPushesScriptState()
         string notification = await ReadSseUntil(stream, "notifications/mtc/scriptState");
         Assert(notification.Contains("\"change\":\"started\""), $"expected script started notification, got: {notification}");
         Assert(notification.Contains("trade.cts"), $"expected script name, got: {notification}");
+    }
+    finally
+    {
+        if (stream != null)
+            await stream.DisposeAsync();
+        harness.Dispose();
+    }
+}
+
+async Task McpSseStreamPushesScriptRuntimeErrors()
+{
+    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    System.IO.Stream? stream = null;
+    try
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/mcp");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+        HttpResponseMessage response = await harness.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+        stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        await ReadSseUntil(stream, "mtc mcp stream open");
+
+        // Simulates the MtcJsonRpcIntegration wiring: an interpreter error becomes a
+        // System GameAgentEvent with scriptEvent=error metadata and reaches the agent
+        // as both a gameEvent and a scriptState error notification.
+        harness.Server.PublishGameAgentEvent(new GameAgentEvent
+        {
+            Kind = GameAgentEventKind.System,
+            PlainText = "[Script error] trade.cts (main.ts) line 42: Sector 5 not found.",
+            Metadata = new Dictionary<string, string>
+            {
+                ["scriptEvent"] = "error",
+                ["script"] = "trade.cts",
+            },
+        });
+
+        string notification = await ReadSseUntil(stream, "notifications/mtc/scriptState");
+        Assert(notification.Contains("\"change\":\"error\""), $"expected error change, got: {notification}");
+        Assert(notification.Contains("trade.cts"), $"expected script name, got: {notification}");
+        Assert(notification.Contains("isError") == false && notification.Contains("\"success\":false"), $"expected success false, got: {notification}");
     }
     finally
     {

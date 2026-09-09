@@ -158,6 +158,30 @@ namespace TWXProxy.Core
 
         public TwxRuntimeContext RuntimeContext { get; set; } = GlobalModules.CurrentContext;
 
+        /// <summary>
+        /// Raised on the script execution thread whenever a running script reports an error.
+        /// Hosts use this to surface script failures to users, agents, and logs without
+        /// scraping the terminal. <paramref name="message"/> includes the source location.
+        /// </summary>
+        /// <param name="scriptName">Display name of the compiled script that failed, or empty when unknown</param>
+        /// <param name="message">The formatted error message, including source location when known</param>
+        public event Action<string, string>? ScriptError;
+
+        /// <summary>Raises <see cref="ScriptError"/> on behalf of a running script.</summary>
+        /// <param name="scriptName">Display name of the compiled script that failed, or empty when unknown</param>
+        /// <param name="message">The formatted error message, including source location when known</param>
+        internal void OnScriptError(string scriptName, string message)
+        {
+            try
+            {
+                ScriptError?.Invoke(scriptName, message);
+            }
+            catch (Exception subscriberEx)
+            {
+                GlobalModules.DebugLog($"[ModInterpreter] ScriptError subscriber failed: {subscriberEx}\n");
+            }
+        }
+
         public ModInterpreter(IPersistenceController? persistenceController = null)
             : base(persistenceController)
         {
@@ -3177,6 +3201,12 @@ namespace TWXProxy.Core
             return string.Empty;
         }
 
+        private void ReportScriptError(string message)
+        {
+            string scriptName = _cmp?.GetCompiledScriptDisplayName() ?? string.Empty;
+            _owner.OnScriptError(scriptName, message);
+        }
+
         private string FormatScriptErrorMessage(string message)
         {
             string location = FormatCurrentSourceLocation();
@@ -3904,6 +3934,7 @@ namespace TWXProxy.Core
                     GlobalModules.DebugLog(innerMsg + "\n");
                 }
                 ScriptDiagnosticOutput.Write($"\r\n[Script error] {formattedMessage}\r\n");
+                ReportScriptError(formattedMessage);
                 _codePos = prepared.CodeLength;
                 return Finish(true);
             }
@@ -3915,6 +3946,7 @@ namespace TWXProxy.Core
                 Console.WriteLine($"[Script.ExecuteLegacyParsed] Stack trace: {ex.StackTrace}");
                 GlobalModules.DebugLog(msg + "\n");
                 ScriptDiagnosticOutput.Write($"\r\n[Script error] {formattedMessage}\r\n");
+                ReportScriptError(formattedMessage);
                 _codePos = prepared.CodeLength;
                 return Finish(true);
             }
@@ -4141,6 +4173,7 @@ namespace TWXProxy.Core
                     GlobalModules.DebugLog(innerMsg + "\n");
                 }
                 ScriptDiagnosticOutput.Write($"\r\n[Script error] {formattedMessage}\r\n");
+                ReportScriptError(formattedMessage);
                 _codePos = prepared.CodeLength;
                 return Finish(true);
             }
@@ -4152,6 +4185,7 @@ namespace TWXProxy.Core
                 Console.WriteLine($"[Script.ExecutePrepared] Stack trace: {ex.StackTrace}");
                 GlobalModules.DebugLog(msg + "\n");
                 ScriptDiagnosticOutput.Write($"\r\n[Script error] {formattedMessage}\r\n");
+                ReportScriptError(formattedMessage);
                 _codePos = prepared.CodeLength;
                 return Finish(true);
             }
@@ -4650,6 +4684,7 @@ namespace TWXProxy.Core
                     GlobalModules.DebugLog(innerMsg + "\n");
                 }
                 ScriptDiagnosticOutput.Write($"\r\n[Script error] {formattedMessage}\r\n");
+                ReportScriptError(formattedMessage);
                 _codePos = code.Length; // terminate this script
                 return Finish(true);
             }
@@ -4662,6 +4697,7 @@ namespace TWXProxy.Core
                 Console.WriteLine($"[Script.Execute] Stack trace: {ex.StackTrace}");
                 GlobalModules.DebugLog(msg + "\n");
                 ScriptDiagnosticOutput.Write($"\r\n[Script error] {formattedMessage}\r\n");
+                ReportScriptError(formattedMessage);
                 _codePos = code.Length; // terminate this script
                 return Finish(true);
             }

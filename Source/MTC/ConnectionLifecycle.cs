@@ -155,6 +155,7 @@ public partial class MainWindow
         var interpreter = new Core.ModInterpreter();
         interpreter.ScriptDirectory = effectiveScriptDir;
         interpreter.ProgramDir      = programDir;
+        WireMtcScriptErrorTelemetry(interpreter, owningTab);
         Core.GlobalModules.ProgramDir = programDir;  // shared global used by some script commands
         ApplyDebugLoggingPreferences();
 

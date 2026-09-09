@@ -46,8 +46,35 @@ public partial class MainWindow
         return _embeddedGameConfig.Mtc.JsonRpc;
     }
 
-    private static bool HasMtcJsonRpcGameContext(
-        EmbeddedGameConfig? config,
+    /// <summary>
+    /// Subscribes interpreter runtime script errors into the tab's game-agent event stream,
+    /// so failures reach the terminal feed, JSON-RPC subscribers, and MCP SSE clients.
+    /// </summary>
+    /// <param name="interpreter">The interpreter whose running scripts are observed</param>
+    /// <param name="tab">The MTC tab hosting the game session</param>
+    private static void WireMtcScriptErrorTelemetry(Core.ModInterpreter interpreter, MtcTabPrototype? tab)
+    {
+        if (tab == null)
+            return;
+
+        interpreter.ScriptError += (scriptName, message) =>
+        {
+            var evt = new GameAgentEvent
+            {
+                Kind = GameAgentEventKind.System,
+                GameName = tab.Title,
+                PlainText = $"[Script error] {message}",
+                Metadata = new Dictionary<string, string>
+                {
+                    ["scriptEvent"] = "error",
+                    ["script"] = string.IsNullOrWhiteSpace(scriptName) ? "unknown" : scriptName,
+                },
+            };
+            tab.GameAgent.Record(evt);
+        };
+    }
+
+    private static bool HasMtcJsonRpcGameContext(        EmbeddedGameConfig? config,
         string? gameName,
         Core.ModDatabase? sessionDb,
         Core.GameInstance? gameInstance)

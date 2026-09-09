@@ -535,6 +535,12 @@ internal sealed class MtcJsonRpcServer : IDisposable
             client.EnqueueEvent(evt);
 
         McpServer.PublishEvent(evt);
+        if (evt.Metadata.TryGetValue("scriptEvent", out string? scriptEvent) &&
+            string.Equals(scriptEvent, "error", StringComparison.OrdinalIgnoreCase) &&
+            evt.Metadata.TryGetValue("script", out string? scriptName))
+        {
+            McpServer.PublishScriptState("error", scriptName, MtcRpcActionResult.Fail(evt.PlainText));
+        }
     }
 
     public void PublishGameAgentEvent(GameAgentEvent evt)
