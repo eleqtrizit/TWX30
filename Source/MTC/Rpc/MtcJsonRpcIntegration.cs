@@ -15,6 +15,8 @@ public partial class MainWindow
             EmbeddedMtcJsonRpcConfig jsonRpcPrefs = GetCurrentJsonRpcConfig();
             bool shouldEnable = jsonRpcPrefs.Enabled &&
                                 HasMtcJsonRpcGameContext(_embeddedGameConfig, _embeddedGameName, _sessionDb, _gameInstance);
+            if (MtcStartupFlags.JsonRpcEnabledAtStartup)
+                shouldEnable = true;
             if (!shouldEnable && _jsonRpcServer == null)
                 return;
 
@@ -24,7 +26,6 @@ public partial class MainWindow
                 Enabled = shouldEnable,
                 BindAddress = AppPreferences.NormalizeJsonRpcBindAddress(jsonRpcPrefs.BindAddress),
                 Port = AppPreferences.NormalizeJsonRpcPort(jsonRpcPrefs.Port),
-                AuthToken = AppPreferences.NormalizeJsonRpcAuthToken(jsonRpcPrefs.AuthToken),
                 ApprovalLevel = MtcRpcApprovalLevels.Parse(jsonRpcPrefs.ApprovalLevel),
             });
         }
@@ -99,6 +100,7 @@ public partial class MainWindow
             RunScriptAsync = RunMtcRpcScriptAsync,
             StopScriptAsync = StopMtcRpcScriptAsync,
             ApproveActionAsync = ApproveMtcRpcActionAsync,
+            ConnectServerAsync = ConnectMtcRpcServerAsync,
             WriteScriptAsync = WriteMtcRpcScriptFileAsync,
             EditScriptAsync = EditMtcRpcScriptFileAsync,
             ReadScriptAsync = ReadMtcRpcScriptFileAsync,
@@ -152,7 +154,7 @@ public partial class MainWindow
         => InvokeMtcRpcUiAsync(() =>
         {
             if (!IsMtcRpcConnected())
-                return Task.FromResult(MtcRpcActionResult.Fail("No active game connection."));
+                return Task.FromResult(MtcRpcActionResult.Fail("Connect to server, first."));
 
             string payload = command ?? string.Empty;
             if (appendEnter && !payload.EndsWith('\r') && !payload.EndsWith('\n'))
@@ -180,7 +182,7 @@ public partial class MainWindow
             Core.ModInterpreter? interpreter = CurrentInterpreter;
             bool remoteProxyScripts = interpreter == null && CanUseRemoteProxyScripts();
             if (interpreter == null && !remoteProxyScripts)
-                return Task.FromResult(MtcRpcActionResult.Fail("Proxy scripts are not available for the current game."));
+                return Task.FromResult(MtcRpcActionResult.Fail("Connect to server, first."));
 
             try
             {
@@ -210,7 +212,7 @@ public partial class MainWindow
             Core.ModInterpreter? interpreter = CurrentInterpreter;
             bool remoteProxyScripts = interpreter == null && CanUseRemoteProxyScripts();
             if (interpreter == null && !remoteProxyScripts)
-                return Task.FromResult(MtcRpcActionResult.Fail("Proxy scripts are not available for the current game."));
+                return Task.FromResult(MtcRpcActionResult.Fail("Connect to server, first."));
 
             try
             {
@@ -385,6 +387,34 @@ public partial class MainWindow
 
     private static string ScriptPathRejectionMessage(string path)
         => $"Invalid script path '{path}': the path must be relative to the scripts root and cannot escape it.";
+
+    private async Task<MtcRpcActionResult> ConnectMtcRpcServerAsync()
+    {
+        bool alreadyConnected = await InvokeMtcRpcUiAsync(() =>
+            Task.FromResult(_telnet.IsConnected || (_gameInstance?.IsConnected ?? false))).ConfigureAwait(false);
+        if (alreadyConnected)
+            return MtcRpcActionResult.Ok("Already connected to the game server.", new Dictionary<string, string>
+            {
+                ["server"] = _state.Host,
+                ["port"] = _state.Port.ToString(),
+            });
+
+        await InvokeMtcRpcUiAsync(async () =>
+        {
+            await OnConnectAsync().ConfigureAwait(true);
+            return string.Empty;
+        }).ConfigureAwait(false);
+
+        bool connected = await InvokeMtcRpcUiAsync(() =>
+            Task.FromResult(_telnet.IsConnected || (_gameInstance?.IsConnected ?? false))).ConfigureAwait(false);
+        return connected
+            ? MtcRpcActionResult.Ok("Connected to the game server.", new Dictionary<string, string>
+            {
+                ["server"] = _state.Host,
+                ["port"] = _state.Port.ToString(),
+            })
+            : MtcRpcActionResult.Fail("Connection failed; check the MTC terminal for the reason.");
+    }
 
     private Task<bool> ApproveMtcRpcActionAsync(string action, string details)
         => InvokeMtcRpcUiAsync(() => ShowConfirmAsync(

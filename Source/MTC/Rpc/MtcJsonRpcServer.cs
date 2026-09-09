@@ -41,11 +41,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
         McpServer = new McpServer(this);
     }
 
-    /// <summary>Auth check reused by the MCP endpoint so both surfaces share one token model.</summary>
-    /// <param name="request">The HTTP request to authorize</param>
-    /// <returns>True when the request carries a valid auth token</returns>
-    internal bool IsRequestAuthorized(HttpListenerRequest request) => IsAuthorized(request);
-
     /// <summary>Dispatches an MCP tool call onto the same JSON-RPC method handlers used by HTTP/WebSocket clients.</summary>
     /// <param name="method">The mtc.* method backing the tool</param>
     /// <param name="parameters">Tool arguments, matching the JSON-RPC parameter names</param>
@@ -210,15 +205,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 }, cancellationToken).ConfigureAwait(false);
                 return;
             }
-
-            if (!IsAuthorized(context.Request))
-            {
-                context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
-                context.Response.Headers["WWW-Authenticate"] = "Bearer";
-                await WriteJsonAsync(context.Response, new { error = "unauthorized" }, cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
             if (string.Equals(context.Request.Url?.AbsolutePath, McpServer.Path, StringComparison.OrdinalIgnoreCase))
             {
                 await McpServer.HandleAsync(context, cancellationToken).ConfigureAwait(false);
@@ -281,25 +267,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 _clients.Remove(client.Id);
             client.Dispose();
         }
-    }
-
-    private bool IsAuthorized(HttpListenerRequest request)
-    {
-        string token = _options.AuthToken.Trim();
-        if (string.IsNullOrWhiteSpace(token))
-            return false;
-
-        string? header = request.Headers["Authorization"];
-        if (!string.IsNullOrWhiteSpace(header) &&
-            header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(header[7..].Trim(), token, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        string? queryToken = request.QueryString["token"];
-        return !string.IsNullOrWhiteSpace(queryToken) &&
-               string.Equals(queryToken.Trim(), token, StringComparison.Ordinal);
     }
 
     private async Task<string?> DispatchJsonAsync(string requestJson, MtcRpcWebSocketClient? client, CancellationToken cancellationToken)
@@ -453,6 +420,12 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 return await _bridge.RunMombotCommandAsync(command).ConfigureAwait(false);
             }
 
+            case "mtc.connectServer":
+            {
+                await EnsureActionAllowedAsync("Connect", "connect_server").ConfigureAwait(false);
+                return await _bridge.ConnectServerAsync().ConfigureAwait(false);
+            }
+
             case "mtc.readScript":
             {
                 string path = ReadString(parameters, "path", required: true);
@@ -529,6 +502,7 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 "mtc.subscribe",
                 "mtc.unsubscribe",
                 "mtc.proposeCommand",
+                "mtc.connectServer",
                 "mtc.sendCommand",
                 "mtc.runMombotCommand",
                 "mtc.runScript",
@@ -671,7 +645,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
             Enabled = options.Enabled,
             BindAddress = bindAddress,
             Port = port,
-            AuthToken = options.AuthToken.Trim(),
             ApprovalLevel = options.ApprovalLevel,
         };
     }

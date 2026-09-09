@@ -145,6 +145,15 @@ internal static class McpToolSchema
         },
         new()
         {
+            Name = "connect_server",
+            Description = "Connect to the configured game server using the current connect settings (same as the Connect menu action). Other connection-dependent tools return 'Connect to server, first.' until this succeeds. Subject to the configured approval level.",
+            JsonRpcMethod = "mtc.connectServer",
+            ReadOnly = false,
+            Parameters = NoParameters,
+            RequiredParameters = [],
+        },
+        new()
+        {
             Name = "write_script",
             Description = "Create or overwrite a TWX script source file. The 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts' or 'include/header.ts'); forward slashes are accepted; paths escaping the scripts root are rejected. Subject to the configured approval level.",
             JsonRpcMethod = "mtc.writeScript",

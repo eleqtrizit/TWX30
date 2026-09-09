@@ -49,7 +49,6 @@ internal sealed class MtcJsonRpcServerOptions
     public bool Enabled { get; init; }
     public string BindAddress { get; init; } = "127.0.0.1";
     public int Port { get; init; } = 7623;
-    public string AuthToken { get; init; } = string.Empty;
     public MtcRpcApprovalLevel ApprovalLevel { get; init; } = MtcRpcApprovalLevel.ApproveActions;
 
     public string Endpoint => $"http://{BindAddress}:{Port}/";
@@ -89,6 +88,7 @@ internal sealed class MtcRpcBridge
     public required Func<string, Task<MtcRpcActionResult>> RunScriptAsync { get; init; }
     public required Func<int?, string?, Task<MtcRpcActionResult>> StopScriptAsync { get; init; }
     public required Func<string, string, Task<bool>> ApproveActionAsync { get; init; }
+    public required Func<Task<MtcRpcActionResult>> ConnectServerAsync { get; init; }
     public required Func<string, string, Task<MtcRpcActionResult>> WriteScriptAsync { get; init; }
     public required Func<string, string, string, bool, Task<MtcRpcActionResult>> EditScriptAsync { get; init; }
     public required Func<string, int, int, Task<MtcScriptReadResult>> ReadScriptAsync { get; init; }

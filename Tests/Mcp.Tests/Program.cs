@@ -12,8 +12,6 @@ using MTC;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-const string Token = "test-token";
-
 var tests = new (string Name, Func<Task> Body)[]
 {
     ("MCP initialize responds with protocol version and server info", McpInitializeReturnsProtocolVersionAndServerInfo),
@@ -26,7 +24,6 @@ var tests = new (string Name, Func<Task> Body)[]
     ("MCP full-automation level sends commands without approval", McpFullAutomationSendsWithoutApproval),
     ("MCP unknown tool reports invalid params", McpUnknownToolReportsInvalidParams),
     ("MCP missing required argument reports invalid params", McpMissingRequiredArgumentReportsInvalidParams),
-    ("MCP unauthorized request without a bearer token", McpUnauthorizedWithoutBearerToken),
     ("MCP packet sniffing mtc.ping round-trips", McpPingRoundTrips),
     ("JSON-RPC HTTP POST keeps working next to MCP", JsonRpcHttpPostStillWorks),
     ("McpToolSchema maps every tool onto an mtc.* handler", ToolSchemaMapsEveryToolOntoJsonRpc),
@@ -71,12 +68,10 @@ static async Task<McpHarness> StartServer(MtcRpcApprovalLevel approvalLevel)
         Enabled = true,
         BindAddress = "127.0.0.1",
         Port = FreePort(),
-        AuthToken = Token,
         ApprovalLevel = approvalLevel,
     });
 
     var client = new HttpClient { BaseAddress = new Uri(server.Endpoint) };
-    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
     await Task.Delay(100);
     return new McpHarness(server, client, stub);
 }
@@ -182,6 +177,7 @@ async Task McpToolsListAdvertisesAllTools()
             "send_command",
             "run_mombot_command",
             "run_script",
+            "connect_server",
             "write_script",
             "edit_script",
             "read_script",
@@ -316,25 +312,6 @@ async Task McpMissingRequiredArgumentReportsInvalidParams()
     }
 }
 
-async Task McpUnauthorizedWithoutBearerToken()
-{
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
-    try
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp")
-        {
-            Content = new StringContent("""{"jsonrpc":"2.0","id":1,"method":"ping"}""", Encoding.UTF8, "application/json"),
-        };
-        using var anonymous = new HttpClient { BaseAddress = harness.Client.BaseAddress };
-        HttpResponseMessage response = await anonymous.SendAsync(request).ConfigureAwait(false);
-        Assert(response.StatusCode == HttpStatusCode.Unauthorized, $"expected 401, got {response.StatusCode}");
-    }
-    finally
-    {
-        harness.Dispose();
-    }
-}
-
 async Task McpPingRoundTrips()
 {
     McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
@@ -368,7 +345,7 @@ async Task JsonRpcHttpPostStillWorks()
 async Task ToolSchemaMapsEveryToolOntoJsonRpc()
 {
     McpToolDescriptor[] tools = McpToolSchema.DescribeTools().ToArray();
-    Assert(tools.Length == 13, $"expected 13 tools, got {tools.Length}");
+    Assert(tools.Length == 14, $"expected 14 tools, got {tools.Length}");
     foreach (McpToolDescriptor tool in tools)
     {
         Assert(tool.JsonRpcMethod.StartsWith("mtc.", StringComparison.Ordinal), $"{tool.Name} must map onto an mtc.* method");
@@ -376,7 +353,7 @@ async Task ToolSchemaMapsEveryToolOntoJsonRpc()
         Assert(McpToolSchema.BuildInputSchema(tool) != null, $"{tool.Name} needs an input schema");
     }
 
-    Assert(tools.Count(tool => !tool.ReadOnly) == 6, "exactly the six mutating tools are marked non-readonly");
+    Assert(tools.Count(tool => !tool.ReadOnly) == 7, "exactly the seven mutating tools are marked non-readonly");
 }
 
 async Task RunAndStopScriptHandlersWork()
@@ -404,7 +381,6 @@ async Task McpGetWithoutSseAcceptReturns405()
     try
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/mcp");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         HttpResponseMessage response = await harness.Client.SendAsync(request).ConfigureAwait(false);
         Assert(response.StatusCode == HttpStatusCode.MethodNotAllowed, $"expected 405, got {response.StatusCode}");
     }
@@ -421,7 +397,6 @@ async Task McpSseStreamPushesGameEvents()
     try
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/mcp");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         HttpResponseMessage response = await harness.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         Assert(response.StatusCode == HttpStatusCode.OK, $"expected 200, got {response.StatusCode}");
@@ -455,7 +430,6 @@ async Task McpSseStreamPushesScriptState()
     try
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/mcp");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         HttpResponseMessage response = await harness.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
@@ -484,7 +458,6 @@ async Task McpSseStreamPushesScriptRuntimeErrors()
     try
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/mcp");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         HttpResponseMessage response = await harness.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
@@ -591,19 +564,15 @@ static void ScriptPathGuardInsideRootBoundaries()
 
 internal sealed record McpHarness(MtcJsonRpcServer Server, HttpClient Client, StubBridge Stub)
 {
-    private const string AuthToken = "test-token";
-
     private static JsonElement ParseBody(string body)
         => JsonDocument.Parse(body).RootElement.Clone();
 
-    public async Task<string> PostMcpAsync(string json, bool authorized = true)
+    public async Task<string> PostMcpAsync(string json)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp")
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
-        if (authorized)
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AuthToken);
         HttpResponseMessage response = await Client.SendAsync(request).ConfigureAwait(false);
         return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
@@ -614,7 +583,6 @@ internal sealed record McpHarness(MtcJsonRpcServer Server, HttpClient Client, St
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AuthToken);
         HttpResponseMessage response = await Client.SendAsync(request).ConfigureAwait(false);
         return ParseBody(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
@@ -672,6 +640,7 @@ internal sealed class StubBridge
                 ApprovalRequests++;
                 return Task.FromResult(ApprovalDecision);
             },
+            ConnectServerAsync = () => Task.FromResult(MtcRpcActionResult.Ok("connected: test")),
             WriteScriptAsync = (path, content) => Task.FromResult(MtcRpcActionResult.Ok($"write: {path}")),
             EditScriptAsync = (path, _, _, _) => Task.FromResult(MtcRpcActionResult.Ok($"edit: {path}")),
             ReadScriptAsync = (path, offset, limit) => Task.FromResult(new MtcScriptReadResult

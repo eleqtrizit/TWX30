@@ -8,6 +8,8 @@ if (MTC.UnixAutoDetach.TryRelaunchDetached(args))
 // Console.WriteLine calls in Core do not leak to the terminal.
 Console.SetOut(TextWriter.Null);
 
+MTC.MtcStartupFlags.Parse(args);
+
 var prefs = MTC.AppPreferences.Load();
 MTC.AppPaths.SetConfiguredProgramDir(prefs.ProgramDirectory);
 GlobalModules.ProgramDir = MTC.AppPaths.ProgramDir;
