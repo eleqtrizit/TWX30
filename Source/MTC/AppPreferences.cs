@@ -128,7 +128,6 @@ public class AppPreferences
     public bool DisableScriptWindowStayInFront { get; set; }
     public bool PythonScriptsEnabled { get; set; } = true;
     public string PythonInterpreterPath { get; set; } = "auto";
-    public bool PythonExposeJsonRpcToken { get; set; }
     public bool VmMetricsEnabled { get; set; }
     public bool PerformanceMonitoringEnabled { get; set; }
     public bool UpdateChecksEnabled { get; set; } = true;
@@ -161,7 +160,6 @@ public class AppPreferences
     public bool JsonRpcEnabled { get; set; }
     public string JsonRpcBindAddress { get; set; } = "127.0.0.1";
     public int JsonRpcPort { get; set; } = 7623;
-    public string JsonRpcAuthToken { get; set; } = GenerateJsonRpcAuthToken();
     public string JsonRpcApprovalLevel { get; set; } = MtcRpcApprovalLevels.ApproveActions;
 
     private static string LegacySharedPrefsPath()
@@ -255,7 +253,6 @@ public class AppPreferences
                 new XElement("DisableScriptWindowStayInFront", DisableScriptWindowStayInFront),
                 new XElement("PythonScriptsEnabled", PythonScriptsEnabled),
                 new XElement("PythonInterpreterPath", NormalizePythonInterpreterPath(PythonInterpreterPath)),
-                new XElement("PythonExposeJsonRpcToken", PythonExposeJsonRpcToken),
                 new XElement("VmMetricsEnabled", VmMetricsEnabled),
                 new XElement("PerformanceMonitoringEnabled", PerformanceMonitoringEnabled),
                 new XElement("Updates",
@@ -440,8 +437,6 @@ public class AppPreferences
             if (bool.TryParse((string?)root.Element("PythonScriptsEnabled"), out bool pythonScriptsEnabled))
                 prefs.PythonScriptsEnabled = pythonScriptsEnabled;
             prefs.PythonInterpreterPath = NormalizePythonInterpreterPath((string?)root.Element("PythonInterpreterPath"));
-            if (bool.TryParse((string?)root.Element("PythonExposeJsonRpcToken"), out bool pythonExposeJsonRpcToken))
-                prefs.PythonExposeJsonRpcToken = pythonExposeJsonRpcToken;
             if (bool.TryParse((string?)root.Element("VmMetricsEnabled"), out bool vmMetricsEnabled))
                 prefs.VmMetricsEnabled = vmMetricsEnabled;
             if (bool.TryParse((string?)root.Element("PerformanceMonitoringEnabled"), out bool performanceMonitoringEnabled))
@@ -786,12 +781,6 @@ public class AppPreferences
         return string.IsNullOrWhiteSpace(normalized) ? "127.0.0.1" : normalized;
     }
 
-    public static string NormalizeJsonRpcAuthToken(string? value)
-    {
-        string normalized = (value ?? string.Empty).Trim();
-        return string.IsNullOrWhiteSpace(normalized) ? GenerateJsonRpcAuthToken() : normalized;
-    }
-
     public static string NormalizePythonInterpreterPath(string? value)
     {
         string normalized = (value ?? string.Empty).Trim();
@@ -848,15 +837,6 @@ public class AppPreferences
 
         return null;
     }
-
-    public void EnsureJsonRpcAuthToken()
-    {
-        JsonRpcAuthToken = NormalizeJsonRpcAuthToken(JsonRpcAuthToken);
-    }
-
-    public static string GenerateJsonRpcAuthToken()
-        => Convert.ToHexString(Guid.NewGuid().ToByteArray()).ToLowerInvariant() +
-           Convert.ToHexString(Guid.NewGuid().ToByteArray()).ToLowerInvariant();
 
     private static string? ResolveRecentFilePath(string? path, string programDirectory)
     {

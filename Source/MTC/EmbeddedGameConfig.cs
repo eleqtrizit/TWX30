@@ -133,7 +133,6 @@ internal class EmbeddedMtcJsonRpcConfig
     public bool Enabled { get; set; }
     public string BindAddress { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 7623;
-    public string AuthToken { get; set; } = string.Empty;
     public string ApprovalLevel { get; set; } = MtcRpcApprovalLevels.ApproveActions;
 }
 

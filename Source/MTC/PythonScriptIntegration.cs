@@ -54,14 +54,11 @@ public partial class MainWindow
         }
 
         string? rpcUrl = null;
-        string? rpcToken = null;
         if (_appPrefs.JsonRpcEnabled)
         {
             string bind = AppPreferences.NormalizeJsonRpcBindAddress(_appPrefs.JsonRpcBindAddress);
             int port = AppPreferences.NormalizeJsonRpcPort(_appPrefs.JsonRpcPort);
             rpcUrl = $"http://{bind}:{port}/";
-            if (_appPrefs.PythonExposeJsonRpcToken)
-                rpcToken = AppPreferences.NormalizeJsonRpcAuthToken(_appPrefs.JsonRpcAuthToken);
         }
 
         PythonScriptStartResult result = await _pythonScripts.StartAsync(new PythonScriptLaunchOptions(
@@ -72,8 +69,7 @@ public partial class MainWindow
             fullPath,
             GetGameAgentGameName(),
             CurrentInterpreter?.ProgramDir ?? GetEffectiveProxyProgramDir(scriptDirectory),
-            rpcUrl,
-            rpcToken));
+            rpcUrl));
 
         if (!result.Success)
         {

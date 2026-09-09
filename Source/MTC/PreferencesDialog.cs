@@ -179,7 +179,6 @@ internal class PreferencesDialog : Window
         txtGameIdleKeepaliveInterval.HorizontalAlignment = HorizontalAlignment.Left;
         var chkDisableScriptWindowStayInFront = BuildCheckBox("Ignore stay-in-front for script popup windows", prefs.DisableScriptWindowStayInFront);
         var chkPythonScripts = BuildCheckBox("Enable Python scripts in the Scripts menu", prefs.PythonScriptsEnabled);
-        var chkPythonExposeRpcToken = BuildCheckBox("Expose JSON-RPC bearer token to Python scripts", prefs.PythonExposeJsonRpcToken);
         var txtPythonInterpreter = BuildPathTextBox(
             AppPreferences.NormalizePythonInterpreterPath(prefs.PythonInterpreterPath),
             "auto");
@@ -217,7 +216,6 @@ internal class PreferencesDialog : Window
         txtScrollbackLines.Width = 120;
         txtScrollbackLines.HorizontalAlignment = HorizontalAlignment.Left;
         bool hasGame = gameConfig != null && !string.IsNullOrWhiteSpace(gameName);
-        string initialJsonRpcToken = AppPreferences.NormalizeJsonRpcAuthToken(jsonRpcPrefs.AuthToken);
         var chkJsonRpc = BuildCheckBox("Enable JSON-RPC 2.0 server for this game", hasGame && jsonRpcPrefs.Enabled);
         var txtJsonRpcBind = BuildPathTextBox(
             AppPreferences.NormalizeJsonRpcBindAddress(jsonRpcPrefs.BindAddress),
@@ -227,24 +225,11 @@ internal class PreferencesDialog : Window
             "7623");
         txtJsonRpcPort.Width = 110;
         txtJsonRpcPort.HorizontalAlignment = HorizontalAlignment.Left;
-        var txtJsonRpcToken = BuildPathTextBox(
-            initialJsonRpcToken,
-            "bearer token");
-        var btnRegenerateRpcToken = new Button
-        {
-            Content = "Regenerate",
-            Background = BgButton,
-            Foreground = FgNormal,
-            Margin = new Thickness(8, 0, 0, 0),
-        };
-        btnRegenerateRpcToken.Click += (_, _) => txtJsonRpcToken.Text = AppPreferences.GenerateJsonRpcAuthToken();
         var cboJsonRpcApproval = BuildRpcApprovalComboBox(jsonRpcPrefs.ApprovalLevel);
         Control[] jsonRpcControls =
         {
             txtJsonRpcBind,
             txtJsonRpcPort,
-            txtJsonRpcToken,
-            btnRegenerateRpcToken,
             cboJsonRpcApproval,
         };
         void UpdateJsonRpcControlState()
@@ -328,7 +313,7 @@ internal class PreferencesDialog : Window
         var runtimeSection = BuildSection(
             "Runtime",
             "Global terminal and script runtime behavior.",
-            BuildCheckGroup(chkPreparedVm, chkScriptInfiniteLoopProtection, chkDisableScriptWindowStayInFront, chkVmMetrics, chkPythonScripts, chkPythonExposeRpcToken),
+            BuildCheckGroup(chkPreparedVm, chkScriptInfiniteLoopProtection, chkDisableScriptWindowStayInFront, chkVmMetrics, chkPythonScripts),
             BuildCheckGroup(chkStaleConnectionProbe, chkGameIdleKeepalive),
             BuildTwoColumnRow(
                 BuildField(
@@ -360,7 +345,6 @@ internal class PreferencesDialog : Window
                 BuildField("Bind address", txtJsonRpcBind, "Use 127.0.0.1 unless remote access is intentional."),
                 BuildField("Port", txtJsonRpcPort, "HTTP POST and WebSocket JSON-RPC port.")),
             BuildField("Approval level", cboJsonRpcApproval, "Controls whether RPC actions are blocked, approved locally, or automated."),
-            BuildField("Bearer token", BuildTokenRow(txtJsonRpcToken, btnRegenerateRpcToken), "Use Authorization: Bearer <token>, or ?token=<token> for WebSocket clients."));
 
         var btnSave = new Button
         {
@@ -420,7 +404,6 @@ internal class PreferencesDialog : Window
             prefs.DisableScriptWindowStayInFront = chkDisableScriptWindowStayInFront.IsChecked == true;
             prefs.PythonScriptsEnabled = chkPythonScripts.IsChecked == true;
             prefs.PythonInterpreterPath = AppPreferences.NormalizePythonInterpreterPath(txtPythonInterpreter.Text);
-            prefs.PythonExposeJsonRpcToken = chkPythonExposeRpcToken.IsChecked == true;
             prefs.VmMetricsEnabled = chkVmMetrics.IsChecked == true;
             prefs.PerformanceMonitoringEnabled = chkPerformanceMonitoring.IsChecked == true;
             prefs.UpdateChecksEnabled = chkUpdateChecks.IsChecked == true;
@@ -443,7 +426,6 @@ internal class PreferencesDialog : Window
                 jsonRpcPrefs.BindAddress = AppPreferences.NormalizeJsonRpcBindAddress(txtJsonRpcBind.Text);
                 jsonRpcPrefs.Port = AppPreferences.NormalizeJsonRpcPort(
                     int.TryParse(txtJsonRpcPort.Text, out int jsonRpcPort) ? jsonRpcPort : 7623);
-                jsonRpcPrefs.AuthToken = AppPreferences.NormalizeJsonRpcAuthToken(txtJsonRpcToken.Text);
                 jsonRpcPrefs.ApprovalLevel = cboJsonRpcApproval.SelectedItem is RpcApprovalOption rpcApproval
                     ? MtcRpcApprovalLevels.Normalize(rpcApproval.Value)
                     : MtcRpcApprovalLevels.ApproveActions;
@@ -752,18 +734,6 @@ internal class PreferencesDialog : Window
         Grid.SetColumn(right, 2);
         row.Children.Add(left);
         row.Children.Add(right);
-        return row;
-    }
-
-    private static Grid BuildTokenRow(TextBox tokenBox, Button regenerateButton)
-    {
-        var row = new Grid();
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(tokenBox, 0);
-        Grid.SetColumn(regenerateButton, 1);
-        row.Children.Add(tokenBox);
-        row.Children.Add(regenerateButton);
         return row;
     }
 

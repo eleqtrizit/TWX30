@@ -30,8 +30,7 @@ internal sealed record PythonScriptLaunchOptions(
     string FullScriptPath,
     string GameName,
     string ProgramDirectory,
-    string? RpcUrl,
-    string? RpcToken);
+    string? RpcUrl);
 
 internal sealed record PythonScriptStartResult(bool Success, string Message);
 
@@ -278,8 +277,6 @@ internal sealed class PythonScriptRunner : IDisposable
 
         if (!string.IsNullOrWhiteSpace(options.RpcUrl))
             startInfo.Environment["MTC_RPC_URL"] = options.RpcUrl!;
-        if (!string.IsNullOrWhiteSpace(options.RpcToken))
-            startInfo.Environment["MTC_RPC_TOKEN"] = options.RpcToken!;
 
         string helperPath = EnsureHelperModuleDirectory();
         string existingPythonPath = startInfo.Environment.TryGetValue("PYTHONPATH", out string? current)
