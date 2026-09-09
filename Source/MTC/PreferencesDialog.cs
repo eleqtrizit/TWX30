@@ -40,13 +40,6 @@ internal class PreferencesDialog : Window
         new("1 MB", 1024),
     };
 
-    private static readonly RpcApprovalOption[] RpcApprovalOptions =
-    {
-        new("Approve actions", MtcRpcApprovalLevels.ApproveActions),
-        new("Read-only", MtcRpcApprovalLevels.ReadOnly),
-        new("Full automation", MtcRpcApprovalLevels.FullAutomation),
-    };
-
     private static readonly UpdateOption[] UpdateLaneOptions =
     {
         new("Beta", AppPreferences.UpdateLaneBeta),
@@ -225,12 +218,10 @@ internal class PreferencesDialog : Window
             "7623");
         txtJsonRpcPort.Width = 110;
         txtJsonRpcPort.HorizontalAlignment = HorizontalAlignment.Left;
-        var cboJsonRpcApproval = BuildRpcApprovalComboBox(jsonRpcPrefs.ApprovalLevel);
         Control[] jsonRpcControls =
         {
             txtJsonRpcBind,
             txtJsonRpcPort,
-            cboJsonRpcApproval,
         };
         void UpdateJsonRpcControlState()
         {
@@ -343,8 +334,7 @@ internal class PreferencesDialog : Window
             BuildCheckGroup(chkJsonRpc),
             BuildTwoColumnRow(
                 BuildField("Bind address", txtJsonRpcBind, "Use 127.0.0.1 unless remote access is intentional."),
-                BuildField("Port", txtJsonRpcPort, "HTTP POST and WebSocket JSON-RPC port.")),
-            BuildField("Approval level", cboJsonRpcApproval, "Controls whether RPC actions are blocked, approved locally, or automated."),
+                BuildField("Port", txtJsonRpcPort, "HTTP POST and WebSocket JSON-RPC port.")));
 
         var btnSave = new Button
         {
@@ -426,9 +416,6 @@ internal class PreferencesDialog : Window
                 jsonRpcPrefs.BindAddress = AppPreferences.NormalizeJsonRpcBindAddress(txtJsonRpcBind.Text);
                 jsonRpcPrefs.Port = AppPreferences.NormalizeJsonRpcPort(
                     int.TryParse(txtJsonRpcPort.Text, out int jsonRpcPort) ? jsonRpcPort : 7623);
-                jsonRpcPrefs.ApprovalLevel = cboJsonRpcApproval.SelectedItem is RpcApprovalOption rpcApproval
-                    ? MtcRpcApprovalLevels.Normalize(rpcApproval.Value)
-                    : MtcRpcApprovalLevels.ApproveActions;
             }
             prefs.Save();
             Close(true);
@@ -737,24 +724,6 @@ internal class PreferencesDialog : Window
         return row;
     }
 
-    private static ComboBox BuildRpcApprovalComboBox(string selectedValue)
-    {
-        var combo = new ComboBox
-        {
-            ItemsSource = RpcApprovalOptions,
-            Background = BgInput,
-            Foreground = FgNormal,
-            BorderBrush = BdInput,
-            Width = 220,
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-
-        string normalized = MtcRpcApprovalLevels.Normalize(selectedValue);
-        combo.SelectedItem = RpcApprovalOptions.FirstOrDefault(option =>
-            string.Equals(option.Value, normalized, StringComparison.OrdinalIgnoreCase)) ?? RpcApprovalOptions[0];
-        return combo;
-    }
-
     private static ComboBox BuildUpdateOptionComboBox(UpdateOption[] options, string selectedValue)
     {
         var combo = new ComboBox
@@ -807,20 +776,6 @@ internal class PreferencesDialog : Window
 
         public string Label { get; }
         public int Kilobytes { get; }
-
-        public override string ToString() => Label;
-    }
-
-    private sealed class RpcApprovalOption
-    {
-        public RpcApprovalOption(string label, string value)
-        {
-            Label = label;
-            Value = value;
-        }
-
-        public string Label { get; }
-        public string Value { get; }
 
         public override string ToString() => Label;
     }

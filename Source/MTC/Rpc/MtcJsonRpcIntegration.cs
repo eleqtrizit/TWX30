@@ -26,7 +26,6 @@ public partial class MainWindow
                 Enabled = shouldEnable,
                 BindAddress = AppPreferences.NormalizeJsonRpcBindAddress(jsonRpcPrefs.BindAddress),
                 Port = AppPreferences.NormalizeJsonRpcPort(jsonRpcPrefs.Port),
-                ApprovalLevel = MtcRpcApprovalLevels.Parse(jsonRpcPrefs.ApprovalLevel),
             });
         }
         catch (Exception ex)
@@ -99,7 +98,6 @@ public partial class MainWindow
             RunMombotCommandAsync = ExecuteGameAgentMombotCommandAsync,
             RunScriptAsync = RunMtcRpcScriptAsync,
             StopScriptAsync = StopMtcRpcScriptAsync,
-            ApproveActionAsync = ApproveMtcRpcActionAsync,
             ConnectServerAsync = ConnectMtcRpcServerAsync,
             WriteScriptAsync = WriteMtcRpcScriptFileAsync,
             EditScriptAsync = EditMtcRpcScriptFileAsync,

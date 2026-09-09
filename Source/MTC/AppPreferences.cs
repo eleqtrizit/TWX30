@@ -160,7 +160,6 @@ public class AppPreferences
     public bool JsonRpcEnabled { get; set; }
     public string JsonRpcBindAddress { get; set; } = "127.0.0.1";
     public int JsonRpcPort { get; set; } = 7623;
-    public string JsonRpcApprovalLevel { get; set; } = MtcRpcApprovalLevels.ApproveActions;
 
     private static string LegacySharedPrefsPath()
         => Path.Combine(AppPaths.AppDataDir, "prefs.xml");

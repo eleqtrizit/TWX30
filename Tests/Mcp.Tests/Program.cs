@@ -17,11 +17,12 @@ var tests = new (string Name, Func<Task> Body)[]
     ("MCP initialize responds with protocol version and server info", McpInitializeReturnsProtocolVersionAndServerInfo),
     ("MCP initialized notification returns 202 accepted", McpInitializedNotificationReturnsAccepted),
     ("MCP tools/list advertises all tools with schemas", McpToolsListAdvertisesAllTools),
+    ("MCP tool calls run without approval prompts", McpToolCallsRunWithoutApprovalPrompts),
     ("MCP get_context tool call returns content from the bridge", McpGetContextToolCallReturnsContent),
     ("MCP query_sector tool call returns database snapshot", McpQuerySectorToolCallReturnsSnapshot),
-    ("MCP read-only approval level rejects send_command as tool error", McpReadOnlyRejectsSendCommand),
-    ("MCP approve-actions level honors player approval", McpApproveActionsHonorsPlayerApproval),
-    ("MCP full-automation level sends commands without approval", McpFullAutomationSendsWithoutApproval),
+    
+    
+    
     ("MCP unknown tool reports invalid params", McpUnknownToolReportsInvalidParams),
     ("MCP missing required argument reports invalid params", McpMissingRequiredArgumentReportsInvalidParams),
     ("MCP packet sniffing mtc.ping round-trips", McpPingRoundTrips),
@@ -59,7 +60,7 @@ return failed == 0 ? 0 : 1;
 // Harness helpers
 // ---------------------------------------------------------------------------
 
-static async Task<McpHarness> StartServer(MtcRpcApprovalLevel approvalLevel)
+static async Task<McpHarness> StartServer()
 {
     var stub = new StubBridge();
     var server = new MtcJsonRpcServer(stub.BuildBridge());
@@ -68,7 +69,6 @@ static async Task<McpHarness> StartServer(MtcRpcApprovalLevel approvalLevel)
         Enabled = true,
         BindAddress = "127.0.0.1",
         Port = FreePort(),
-        ApprovalLevel = approvalLevel,
     });
 
     var client = new HttpClient { BaseAddress = new Uri(server.Endpoint) };
@@ -124,7 +124,7 @@ static void Assert(bool condition, string message)
 
 async Task McpInitializeReturnsProtocolVersionAndServerInfo()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync(
@@ -142,7 +142,7 @@ async Task McpInitializeReturnsProtocolVersionAndServerInfo()
 
 async Task McpInitializedNotificationReturnsAccepted()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         await harness.PostMcpAsync("""{"jsonrpc":"2.0","method":"initialize","params":{}}""");
@@ -157,7 +157,7 @@ async Task McpInitializedNotificationReturnsAccepted()
 
 async Task McpToolsListAdvertisesAllTools()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}"""));
@@ -198,7 +198,7 @@ async Task McpToolsListAdvertisesAllTools()
 
 async Task McpGetContextToolCallReturnsContent()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync(ToolsCall("get_context", "{}")));
@@ -214,7 +214,7 @@ async Task McpGetContextToolCallReturnsContent()
 
 async Task McpQuerySectorToolCallReturnsSnapshot()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync(ToolsCall("query_sector", """{"sector":3}""")));
@@ -228,54 +228,14 @@ async Task McpQuerySectorToolCallReturnsSnapshot()
     }
 }
 
-async Task McpReadOnlyRejectsSendCommand()
+async Task McpToolCallsRunWithoutApprovalPrompts()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync(ToolsCall("send_command", """{"command":"P"}""")));
-        Assert(Select(document, "result", "isError").GetBoolean() == true, "send_command should error in read-only mode");
-        string text = Select(document, "result", "content").EnumerateArray().First().GetProperty("text").GetString()!;
-        Assert(text.Contains("approval level"), $"unexpected error text: {text}");
-        Assert(harness.Stub.SentCommands.Count == 0, "no command should reach the game in read-only mode");
-    }
-    finally
-    {
-        harness.Dispose();
-    }
-}
-
-async Task McpApproveActionsHonorsPlayerApproval()
-{
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ApproveActions);
-    try
-    {
-        harness.Stub.ApprovalDecision = true;
-        JsonElement approved = Parse(await harness.PostMcpAsync(ToolsCall("send_command", """{"command":"P"}""")));
-        Assert(Select(approved, "result", "isError").GetBoolean() == false, "approved call should succeed");
-        Assert(harness.Stub.SentCommands.Count == 1 && harness.Stub.SentCommands[0] == "P", "approved command should reach the game");
-
-        harness.Stub.ApprovalDecision = false;
-        JsonElement rejected = Parse(await harness.PostMcpAsync(ToolsCall("send_command", """{"command":"Q"}""")));
-        Assert(Select(rejected, "result", "isError").GetBoolean() == true, "rejected call should error");
-        Assert(harness.Stub.SentCommands.Count == 1, "rejected command must not reach the game");
-        Assert(harness.Stub.ApprovalRequests == 2, $"expected two approval prompts, got {harness.Stub.ApprovalRequests}");
-    }
-    finally
-    {
-        harness.Dispose();
-    }
-}
-
-async Task McpFullAutomationSendsWithoutApproval()
-{
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.FullAutomation);
-    try
-    {
-        JsonElement document = Parse(await harness.PostMcpAsync(ToolsCall("send_command", """{"command":"D"}""")));
-        Assert(Select(document, "result", "isError").GetBoolean() == false, "full-automation call should succeed");
-        Assert(harness.Stub.SentCommands.Count == 1 && harness.Stub.SentCommands[0] == "D", "command should reach the game");
-        Assert(harness.Stub.ApprovalRequests == 0, "full automation must not prompt for approval");
+        Assert(Select(document, "result", "isError").GetBoolean() == false, "send_command should run ungated");
+        Assert(harness.Stub.SentCommands.Count == 1 && harness.Stub.SentCommands[0] == "P", "command should reach the game");
     }
     finally
     {
@@ -285,7 +245,7 @@ async Task McpFullAutomationSendsWithoutApproval()
 
 async Task McpUnknownToolReportsInvalidParams()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync(ToolsCall("does_not_exist", "{}")));
@@ -299,7 +259,7 @@ async Task McpUnknownToolReportsInvalidParams()
 
 async Task McpMissingRequiredArgumentReportsInvalidParams()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync(ToolsCall("query_sector", "{}")));
@@ -314,7 +274,7 @@ async Task McpMissingRequiredArgumentReportsInvalidParams()
 
 async Task McpPingRoundTrips()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = Parse(await harness.PostMcpAsync("""{"jsonrpc":"2.0","id":5,"method":"ping"}"""));
@@ -328,7 +288,7 @@ async Task McpPingRoundTrips()
 
 async Task JsonRpcHttpPostStillWorks()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement document = await harness.PostRpcAsync(
@@ -358,7 +318,7 @@ async Task ToolSchemaMapsEveryToolOntoJsonRpc()
 
 async Task RunAndStopScriptHandlersWork()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.FullAutomation);
+    McpHarness harness = await StartServer();
     try
     {
         JsonElement started = await harness.PostRpcAsync(
@@ -377,7 +337,7 @@ async Task RunAndStopScriptHandlersWork()
 
 async Task McpGetWithoutSseAcceptReturns405()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     try
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/mcp");
@@ -392,7 +352,7 @@ async Task McpGetWithoutSseAcceptReturns405()
 
 async Task McpSseStreamPushesGameEvents()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     System.IO.Stream? stream = null;
     try
     {
@@ -425,7 +385,7 @@ async Task McpSseStreamPushesGameEvents()
 
 async Task McpSseStreamPushesScriptState()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.FullAutomation);
+    McpHarness harness = await StartServer();
     System.IO.Stream? stream = null;
     try
     {
@@ -453,7 +413,7 @@ async Task McpSseStreamPushesScriptState()
 
 async Task McpSseStreamPushesScriptRuntimeErrors()
 {
-    McpHarness harness = await StartServer(MtcRpcApprovalLevel.ReadOnly);
+    McpHarness harness = await StartServer();
     System.IO.Stream? stream = null;
     try
     {
@@ -602,8 +562,6 @@ internal sealed record McpHarness(MtcJsonRpcServer Server, HttpClient Client, St
 internal sealed class StubBridge
 {
     public List<string> SentCommands { get; } = [];
-    public bool ApprovalDecision { get; set; }
-    public int ApprovalRequests;
 
     public MtcRpcBridge BuildBridge()
         => new()
@@ -635,11 +593,6 @@ internal sealed class StubBridge
             RunMombotCommandAsync = command => Task.FromResult(MtcRpcActionResult.Ok($"mombot: {command}")),
             RunScriptAsync = script => Task.FromResult(MtcRpcActionResult.Ok($"script started: {script}")),
             StopScriptAsync = (_, _) => Task.FromResult(MtcRpcActionResult.Ok("script stopped")),
-            ApproveActionAsync = (_, _) =>
-            {
-                ApprovalRequests++;
-                return Task.FromResult(ApprovalDecision);
-            },
             ConnectServerAsync = () => Task.FromResult(MtcRpcActionResult.Ok("connected: test")),
             WriteScriptAsync = (path, content) => Task.FromResult(MtcRpcActionResult.Ok($"write: {path}")),
             EditScriptAsync = (path, _, _, _) => Task.FromResult(MtcRpcActionResult.Ok($"edit: {path}")),

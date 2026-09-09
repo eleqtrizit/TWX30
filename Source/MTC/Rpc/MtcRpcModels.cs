@@ -2,54 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace MTC;
 
-internal enum MtcRpcApprovalLevel
-{
-    ReadOnly,
-    ApproveActions,
-    FullAutomation,
-}
-
-internal static class MtcRpcApprovalLevels
-{
-    public const string ReadOnly = "read-only";
-    public const string ApproveActions = "approve-actions";
-    public const string FullAutomation = "full-automation";
-
-    public static string Normalize(string? value)
-    {
-        string normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
-        return normalized switch
-        {
-            "readonly" or "read_only" or "read-only" or "observer" => ReadOnly,
-            "approve" or "approved" or "approval" or "approve-actions" or "full-approval" => ApproveActions,
-            "automation" or "fullautomation" or "full_automation" or "full-automation" or "no-approval" => FullAutomation,
-            _ => ApproveActions,
-        };
-    }
-
-    public static MtcRpcApprovalLevel Parse(string? value)
-        => Normalize(value) switch
-        {
-            ReadOnly => MtcRpcApprovalLevel.ReadOnly,
-            FullAutomation => MtcRpcApprovalLevel.FullAutomation,
-            _ => MtcRpcApprovalLevel.ApproveActions,
-        };
-
-    public static string ToPreferenceValue(MtcRpcApprovalLevel level)
-        => level switch
-        {
-            MtcRpcApprovalLevel.ReadOnly => ReadOnly,
-            MtcRpcApprovalLevel.FullAutomation => FullAutomation,
-            _ => ApproveActions,
-        };
-}
-
 internal sealed class MtcJsonRpcServerOptions
 {
     public bool Enabled { get; init; }
     public string BindAddress { get; init; } = "127.0.0.1";
     public int Port { get; init; } = 7623;
-    public MtcRpcApprovalLevel ApprovalLevel { get; init; } = MtcRpcApprovalLevel.ApproveActions;
 
     public string Endpoint => $"http://{BindAddress}:{Port}/";
 }
@@ -87,7 +44,6 @@ internal sealed class MtcRpcBridge
     public required Func<string, Task<MtcRpcActionResult>> RunMombotCommandAsync { get; init; }
     public required Func<string, Task<MtcRpcActionResult>> RunScriptAsync { get; init; }
     public required Func<int?, string?, Task<MtcRpcActionResult>> StopScriptAsync { get; init; }
-    public required Func<string, string, Task<bool>> ApproveActionAsync { get; init; }
     public required Func<Task<MtcRpcActionResult>> ConnectServerAsync { get; init; }
     public required Func<string, string, Task<MtcRpcActionResult>> WriteScriptAsync { get; init; }
     public required Func<string, string, string, bool, Task<MtcRpcActionResult>> EditScriptAsync { get; init; }

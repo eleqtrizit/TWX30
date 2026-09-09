@@ -409,20 +409,17 @@ internal sealed class MtcJsonRpcServer : IDisposable
             {
                 string command = ReadString(parameters, "command", required: true);
                 bool appendEnter = ReadBool(parameters, "appendEnter", true);
-                await EnsureActionAllowedAsync("Send command", command).ConfigureAwait(false);
                 return await _bridge.SendCommandAsync(command, appendEnter).ConfigureAwait(false);
             }
 
             case "mtc.runMombotCommand":
             {
                 string command = ReadString(parameters, "command", required: true);
-                await EnsureActionAllowedAsync("Run mombot command", command).ConfigureAwait(false);
                 return await _bridge.RunMombotCommandAsync(command).ConfigureAwait(false);
             }
 
             case "mtc.connectServer":
             {
-                await EnsureActionAllowedAsync("Connect", "connect_server").ConfigureAwait(false);
                 return await _bridge.ConnectServerAsync().ConfigureAwait(false);
             }
 
@@ -438,7 +435,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
             {
                 string path = ReadString(parameters, "path", required: true);
                 string content = ReadString(parameters, "content", required: true);
-                await EnsureActionAllowedAsync("Write script", path).ConfigureAwait(false);
                 return await _bridge.WriteScriptAsync(path, content).ConfigureAwait(false);
             }
 
@@ -448,14 +444,12 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 string oldText = ReadString(parameters, "oldText", required: true);
                 string newText = ReadString(parameters, "newText", required: true);
                 bool replaceAll = ReadBool(parameters, "replaceAll", false);
-                await EnsureActionAllowedAsync("Edit script", path).ConfigureAwait(false);
                 return await _bridge.EditScriptAsync(path, oldText, newText, replaceAll).ConfigureAwait(false);
             }
 
             case "mtc.runScript":
             {
                 string script = ReadString(parameters, "script", required: true);
-                await EnsureActionAllowedAsync("Run script", script).ConfigureAwait(false);
                 MtcRpcActionResult started = await _bridge.RunScriptAsync(script).ConfigureAwait(false);
                 McpServer.PublishScriptState("started", script, started);
                 return started;
@@ -468,7 +462,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 if (id == null && string.IsNullOrWhiteSpace(name))
                     throw new MtcRpcException(-32602, "Either id or name is required.");
 
-                await EnsureActionAllowedAsync("Stop script", id?.ToString() ?? name ?? string.Empty).ConfigureAwait(false);
                 MtcRpcActionResult stopped = await _bridge.StopScriptAsync(id, name).ConfigureAwait(false);
                 McpServer.PublishScriptState("stopped", id?.ToString() ?? name ?? string.Empty, stopped);
                 return stopped;
@@ -488,7 +481,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
             protocol = "json-rpc-2.0",
             transport = new[] { "http-post", "websocket" },
             endpoint = options.Endpoint,
-            actionApprovalLevel = MtcRpcApprovalLevels.ToPreferenceValue(options.ApprovalLevel),
             methods = new[]
             {
                 "rpc.discover",
@@ -514,19 +506,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
         };
     }
 
-    private async Task EnsureActionAllowedAsync(string action, string details)
-    {
-        MtcRpcApprovalLevel approvalLevel = _options.ApprovalLevel;
-        if (approvalLevel == MtcRpcApprovalLevel.ReadOnly)
-            throw new MtcRpcException(-32002, "JSON-RPC actions are disabled by the current approval level.");
-
-        if (approvalLevel == MtcRpcApprovalLevel.FullAutomation)
-            return;
-
-        bool approved = await _bridge.ApproveActionAsync(action, details).ConfigureAwait(false);
-        if (!approved)
-            throw new MtcRpcException(-32003, "Action rejected by player approval.");
-    }
 
     private void OnGameAgentEventRecorded(GameAgentEvent evt)
     {
@@ -645,7 +624,6 @@ internal sealed class MtcJsonRpcServer : IDisposable
             Enabled = options.Enabled,
             BindAddress = bindAddress,
             Port = port,
-            ApprovalLevel = options.ApprovalLevel,
         };
     }
 

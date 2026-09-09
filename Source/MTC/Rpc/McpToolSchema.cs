@@ -109,7 +109,7 @@ internal static class McpToolSchema
         new()
         {
             Name = "send_command",
-            Description = "Send raw terminal input to the game stream. Subject to the configured approval level.",
+            Description = "Send raw terminal input to the game stream.",
             JsonRpcMethod = "mtc.sendCommand",
             ReadOnly = false,
             Parameters = new Dictionary<string, McpToolParameter>
@@ -122,7 +122,7 @@ internal static class McpToolSchema
         new()
         {
             Name = "run_mombot_command",
-            Description = "Run a native MTC Mombot command, e.g. 't 1234' for twarp or 'm 1234' for mow. Subject to the configured approval level.",
+            Description = "Run a native MTC Mombot command, e.g. 't 1234' for twarp or 'm 1234' for mow.",
             JsonRpcMethod = "mtc.runMombotCommand",
             ReadOnly = false,
             Parameters = new Dictionary<string, McpToolParameter>
@@ -134,7 +134,7 @@ internal static class McpToolSchema
         new()
         {
             Name = "run_script",
-            Description = "Start a compiled TWX script by name. Subject to the configured approval level.",
+            Description = "Start a compiled TWX script by name.",
             JsonRpcMethod = "mtc.runScript",
             ReadOnly = false,
             Parameters = new Dictionary<string, McpToolParameter>
@@ -146,7 +146,7 @@ internal static class McpToolSchema
         new()
         {
             Name = "connect_server",
-            Description = "Connect to the configured game server using the current connect settings (same as the Connect menu action). Other connection-dependent tools return 'Connect to server, first.' until this succeeds. Subject to the configured approval level.",
+            Description = "Connect to the configured game server using the current connect settings (same as the Connect menu action). Other connection-dependent tools return 'Connect to server, first.' until this succeeds.",
             JsonRpcMethod = "mtc.connectServer",
             ReadOnly = false,
             Parameters = NoParameters,
@@ -155,7 +155,7 @@ internal static class McpToolSchema
         new()
         {
             Name = "write_script",
-            Description = "Create or overwrite a TWX script source file. The 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts' or 'include/header.ts'); forward slashes are accepted; paths escaping the scripts root are rejected. Subject to the configured approval level.",
+            Description = "Create or overwrite a TWX script source file. The 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts' or 'include/header.ts'); forward slashes are accepted; paths escaping the scripts root are rejected.",
             JsonRpcMethod = "mtc.writeScript",
             ReadOnly = false,
             Parameters = new Dictionary<string, McpToolParameter>
@@ -168,7 +168,7 @@ internal static class McpToolSchema
         new()
         {
             Name = "edit_script",
-            Description = "Replace text in an existing TWX script source file. The 'path' argument is RELATIVE to the scripts root directory; paths escaping the scripts root are rejected. Replaces all occurrences when replaceAll is true, otherwise requires a unique match. Subject to the configured approval level.",
+            Description = "Replace text in an existing TWX script source file. The 'path' argument is RELATIVE to the scripts root directory; paths escaping the scripts root are rejected. Replaces all occurrences when replaceAll is true, otherwise requires a unique match.",
             JsonRpcMethod = "mtc.editScript",
             ReadOnly = false,
             Parameters = new Dictionary<string, McpToolParameter>
@@ -197,7 +197,7 @@ internal static class McpToolSchema
         new()
         {
             Name = "stop_script",
-            Description = "Stop a running script by interpreter id or script name. Subject to the configured approval level.",
+            Description = "Stop a running script by interpreter id or script name.",
             JsonRpcMethod = "mtc.stopScript",
             ReadOnly = false,
             Parameters = new Dictionary<string, McpToolParameter>
