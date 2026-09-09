@@ -159,7 +159,8 @@ public partial class MainWindow
             RequestNativeDockMenuRefresh(force: true);
             _ = EnsureSharedPathsConfiguredAsync();
             _ = RecoverPreviousOpenTabsOnStartupAsync();
-            QueueStartupMtcUpdateCheck();
+            if (!MtcStartupFlags.AgentMode)
+                QueueStartupMtcUpdateCheck();
         };
         Activated += (_, _) => RequestActiveTerminalFocusForWindowActivation();
         Closed    += (_, _) =>
@@ -210,6 +211,13 @@ public partial class MainWindow
     {
         if (_mainWindowCloseConfirmed)
             return;
+
+        if (MtcStartupFlags.AgentMode)
+        {
+            _mainWindowCloseConfirmed = true;
+            _mainWindowClosing = true;
+            return;
+        }
 
         IReadOnlyList<MtcTabPrototype> connectedTabs = GetServerConnectedMtcTabs();
         if (connectedTabs.Count == 0)

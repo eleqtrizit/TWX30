@@ -31,6 +31,14 @@ public partial class MainWindow
             if (candidates.Count == 0)
                 return;
 
+            if (MtcStartupFlags.AgentMode)
+            {
+                // Non-interactive sessions must never block on the recovery prompt:
+                // discard the stale locks without restoring tabs.
+                DeleteStaleStartupTabLocks(candidates);
+                return;
+            }
+
             int recoverableCount = candidates.Count(candidate => candidate.CanRecover);
             if (recoverableCount == 0)
             {

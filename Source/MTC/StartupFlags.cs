@@ -29,6 +29,13 @@ internal static class MtcStartupFlags
     /// </summary>
     public static bool FailImmediately { get; private set; }
 
+    /// <summary>
+    /// When true (command-line flag <c>--agent-mode</c>), the application runs non-interactively
+    /// for automation: startup and shutdown dialogs (tab recovery, update checks, close
+    /// confirmations) are suppressed so an unattended session never blocks on a prompt.
+    /// </summary>
+    public static bool AgentMode { get; private set; }
+
     /// <summary>Parses startup flags from the command-line arguments.</summary>
     /// <param name="args">Command-line arguments passed to the executable</param>
     public static void Parse(IReadOnlyList<string> args)
@@ -48,6 +55,12 @@ internal static class MtcStartupFlags
             if (string.Equals(arg, "--fail-immediately", StringComparison.OrdinalIgnoreCase))
             {
                 FailImmediately = true;
+                continue;
+            }
+
+            if (string.Equals(arg, "--agent-mode", StringComparison.OrdinalIgnoreCase))
+            {
+                AgentMode = true;
                 continue;
             }
 
