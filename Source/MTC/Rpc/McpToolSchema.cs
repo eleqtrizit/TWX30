@@ -146,10 +146,14 @@ internal static class McpToolSchema
         new()
         {
             Name = "connect_server",
-            Description = "Connect to the configured game server using the current connect settings (same as the Connect menu action). Other connection-dependent tools return 'Connect to server, first.' until this succeeds.",
+            Description = "Connect to the game server (same as the Connect menu action). Pass host and port to connect to a specific server, e.g. host 'roguetw.net' and port 2002; without them, the currently configured connect settings are used. Other connection-dependent tools return 'Connect to server, first.' until this succeeds.",
             JsonRpcMethod = "mtc.connectServer",
             ReadOnly = false,
-            Parameters = NoParameters,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["host"] = new("string", "Server hostname or IP to connect to (optional)."),
+                ["port"] = new("integer", "Server port (optional, default 2002)."),
+            },
             RequiredParameters = [],
         },
         new()

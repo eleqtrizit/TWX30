@@ -422,22 +422,38 @@ public partial class MainWindow
     private static string ScriptPathRejectionMessage(string path)
         => $"Invalid script path '{path}': the path must be relative to the scripts root and cannot escape it.";
 
-    private async Task<MtcRpcActionResult> ConnectMtcRpcServerAsync()
+    private async Task<MtcRpcActionResult> ConnectMtcRpcServerAsync(string? host, int? port)
     {
+        string connectHost = host?.Trim() ?? string.Empty;
+        int connectPort = port ?? 2002;
         bool alreadyConnected = await InvokeMtcRpcUiAsync(() =>
             Task.FromResult(_telnet.IsConnected || (_gameInstance?.IsConnected ?? false))).ConfigureAwait(false);
         if (alreadyConnected)
+        {
+            if (!string.IsNullOrEmpty(connectHost))
+                return MtcRpcActionResult.Fail("Already connected; disconnect_server first, then connect to the new address.");
             return MtcRpcActionResult.Ok("Already connected to the game server.", new Dictionary<string, string>
             {
                 ["server"] = _state.Host,
                 ["port"] = _state.Port.ToString(),
             });
+        }
 
-        string connectHost = _state.EmbeddedProxy
+        string effectiveHost = _state.EmbeddedProxy
             ? _embeddedGameConfig?.Host ?? _state.Host
             : _state.Host;
-        if (string.IsNullOrWhiteSpace(connectHost))
-            return MtcRpcActionResult.Fail("No connect address configured; set the server and port in MTC first.");
+        if (string.IsNullOrEmpty(connectHost) && string.IsNullOrWhiteSpace(effectiveHost))
+            return MtcRpcActionResult.Fail("No connect address configured; pass host and port or set them in MTC first.");
+
+        if (!string.IsNullOrEmpty(connectHost))
+        {
+            await InvokeMtcRpcUiAsync(() =>
+            {
+                _state.Host = connectHost;
+                _state.Port = connectPort;
+                return Task.FromResult(string.Empty);
+            }).ConfigureAwait(false);
+        }
 
         await InvokeMtcRpcUiAsync(async () =>
         {

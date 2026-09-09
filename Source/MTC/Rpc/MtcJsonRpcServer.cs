@@ -420,7 +420,9 @@ internal sealed class MtcJsonRpcServer : IDisposable
 
             case "mtc.connectServer":
             {
-                return await _bridge.ConnectServerAsync().ConfigureAwait(false);
+                string? host = TryReadString(parameters, "host");
+                int? port = TryReadInt(parameters, "port", 1, 65535);
+                return await _bridge.ConnectServerAsync(host, port).ConfigureAwait(false);
             }
 
             case "mtc.disconnectServer":

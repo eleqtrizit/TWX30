@@ -594,7 +594,7 @@ internal sealed class StubBridge
             RunMombotCommandAsync = command => Task.FromResult(MtcRpcActionResult.Ok($"mombot: {command}")),
             RunScriptAsync = script => Task.FromResult(MtcRpcActionResult.Ok($"script started: {script}")),
             StopScriptAsync = (_, _) => Task.FromResult(MtcRpcActionResult.Ok("script stopped")),
-            ConnectServerAsync = () => Task.FromResult(MtcRpcActionResult.Ok("connected: test")),
+            ConnectServerAsync = (_, _) => Task.FromResult(MtcRpcActionResult.Ok("connected: test")),
             DisconnectServerAsync = () => Task.FromResult(MtcRpcActionResult.Ok("disconnected")),
             WriteScriptAsync = (path, content) => Task.FromResult(MtcRpcActionResult.Ok($"write: {path}")),
             EditScriptAsync = (path, _, _, _) => Task.FromResult(MtcRpcActionResult.Ok($"edit: {path}")),
