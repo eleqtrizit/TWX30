@@ -412,6 +412,14 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 return await _bridge.SendCommandAsync(command, appendEnter).ConfigureAwait(false);
             }
 
+            case "mtc.sendAndWait":
+            {
+                string command = ReadString(parameters, "command", required: true);
+                bool appendEnter = ReadBool(parameters, "appendEnter", true);
+                double timeoutSeconds = ReadDouble(parameters, "timeoutSeconds", 8, 0.5, 90);
+                return await _bridge.SendAndWaitAsync(command, appendEnter, timeoutSeconds).ConfigureAwait(false);
+            }
+
             case "mtc.runMombotCommand":
             {
                 string command = ReadString(parameters, "command", required: true);
@@ -561,6 +569,27 @@ internal sealed class MtcJsonRpcServer : IDisposable
 
     private static int ReadInt(JsonElement? parameters, string name, int defaultValue, int min, int max)
         => TryReadInt(parameters, name, min, max) ?? defaultValue;
+
+    private static double ReadDouble(JsonElement? parameters, string name, double defaultValue, double min, double max)
+    {
+        if (!TryGetParam(parameters, name, out JsonElement value))
+            return defaultValue;
+
+        double parsed;
+        if (value.ValueKind == JsonValueKind.Number)
+        {
+            parsed = value.GetDouble();
+        }
+        else if (value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), out parsed))
+        {
+        }
+        else
+        {
+            throw new MtcRpcException(-32602, $"Parameter '{name}' must be a number.");
+        }
+
+        return Math.Clamp(parsed, min, max);
+    }
 
     private static int? TryReadInt(JsonElement? parameters, string name, int min, int max)
     {

@@ -130,6 +130,7 @@ public partial class MainWindow
             QuerySectorAsync = QueryMtcRpcSectorAsync,
             ListScriptsAsync = ListMtcRpcScriptsAsync,
             SendCommandAsync = SendMtcRpcCommandAsync,
+            SendAndWaitAsync = SendMtcRpcSendAndWaitAsync,
             RunMombotCommandAsync = ExecuteGameAgentMombotCommandAsync,
             RunScriptAsync = RunMtcRpcScriptAsync,
             StopScriptAsync = StopMtcRpcScriptAsync,
@@ -205,6 +206,106 @@ public partial class MainWindow
                 ["appendEnter"] = appendEnter ? "true" : "false",
             }));
         });
+
+    private async Task<MtcRpcSendAndWaitResult> SendMtcRpcSendAndWaitAsync(string command, bool appendEnter, double timeoutSeconds)
+    {
+        MtcRpcActionResult send = await SendMtcRpcCommandAsync(command, appendEnter).ConfigureAwait(true);
+        if (!send.Success)
+            return new MtcRpcSendAndWaitResult
+            {
+                Success = false,
+                Message = send.Message,
+                Lines = [],
+                Prompt = string.Empty,
+                TimedOut = false,
+            };
+
+        long beforeTicks = GetLastGameAgentEventTicks();
+        long watermark = beforeTicks;
+        var collected = new List<string>();
+        string prompt = string.Empty;
+        bool timedOut = true;
+        var deadline = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 0.5, 90));
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        // A sent command immediately re-echoes into the prompt event, so a bare "prompt seen"
+        // check would truncate the response. Require the stream to settle instead: a prompt
+        // event must be observed and no further server events may arrive for SettleDwell.
+        TimeSpan settleDwell = TimeSpan.FromMilliseconds(400);
+        long lastEventTicks = watermark;
+        bool promptSeen = false;
+
+        while (stopwatch.Elapsed < deadline)
+        {
+            await Task.Delay(120).ConfigureAwait(true);
+            (List<string> freshLines, string freshPrompt, long latestTicks) = CollectEventsSince(watermark);
+            if (freshLines.Count > 0 || !string.IsNullOrEmpty(freshPrompt) || latestTicks > watermark)
+            {
+                watermark = latestTicks;
+                collected.AddRange(freshLines);
+                if (!string.IsNullOrEmpty(freshPrompt))
+                {
+                    prompt = freshPrompt;
+                    promptSeen = true;
+                }
+                lastEventTicks = Environment.TickCount64;
+            }
+
+            if (promptSeen && Environment.TickCount64 - lastEventTicks >= settleDwell.TotalMilliseconds)
+            {
+                timedOut = false;
+                break;
+            }
+        }
+
+        return new MtcRpcSendAndWaitResult
+        {
+            Success = true,
+            Message = timedOut
+                ? $"Command sent; no prompt within {deadline.TotalSeconds:0.#}s. Partial response captured."
+                : $"Command sent; response captured ({collected.Count} lines).",
+            Lines = collected,
+            Prompt = prompt,
+            TimedOut = timedOut,
+        };
+    }
+
+    private long GetLastGameAgentEventTicks()
+    {
+        IReadOnlyList<GameAgentEvent> events = _gameAgent.GetRecentEvents(int.MaxValue);
+        return events.Count == 0 ? 0 : events[^1].Timestamp.Ticks;
+    }
+
+    /// <summary>Collects newly observed server lines since <paramref name="watermark"/>.
+    /// Returns the lines, the last prompt seen (empty string when none arrived), and the
+    /// newest event tick (for the stream-settle watermark).</summary>
+    private (List<string> Lines, string Prompt, long LatestTicks) CollectEventsSince(long watermark)
+    {
+        IReadOnlyList<GameAgentEvent> events = _gameAgent.GetRecentEvents(int.MaxValue);
+        var lines = new List<string>();
+        string prompt = string.Empty;
+        long latestTicks = watermark;
+
+        foreach (GameAgentEvent evt in events)
+        {
+            if (evt.Timestamp.Ticks <= watermark)
+                continue;
+
+            if (evt.Timestamp.Ticks > latestTicks)
+                latestTicks = evt.Timestamp.Ticks;
+
+            if (evt.Kind == GameAgentEventKind.ServerPrompt)
+            {
+                prompt = evt.PlainText;
+                continue;
+            }
+
+            if (evt.Kind == GameAgentEventKind.ServerLine && !string.IsNullOrWhiteSpace(evt.PlainText))
+                lines.Add(evt.PlainText);
+        }
+
+        return (lines, prompt, latestTicks);
+    }
 
     private Task<MtcRpcActionResult> RunMtcRpcScriptAsync(string script)
         => InvokeMtcRpcUiAsync(() =>

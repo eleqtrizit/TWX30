@@ -503,6 +503,9 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(trimmed))
                 return queuedOnlineCapture || owningTab?.CapturingOnlinePlayers == true;
 
+            if (MtcStartupFlags.AgentMode)
+                return true;
+
             if (IsGameAgentWindowActive(owningTab))
                 return true;
 

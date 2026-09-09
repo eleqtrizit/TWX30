@@ -227,7 +227,7 @@ public partial class MainWindow
     }
 
     private bool IsGameAgentServerObservationEnabled()
-        => IsGameAgentActiveForCurrentTab();
+        => MtcStartupFlags.AgentMode || IsGameAgentActiveForCurrentTab();
 
     private bool IsGameAgentActiveForCurrentTab()
     {

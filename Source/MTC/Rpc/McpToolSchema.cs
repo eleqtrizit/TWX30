@@ -121,6 +121,20 @@ internal static class McpToolSchema
         },
         new()
         {
+            Name = "send_and_wait",
+            Description = "Send a command to the game and wait for the next prompt, returning every line captured in between. Prefer this over send_command whenever the response matters: it is a single round trip.",
+            JsonRpcMethod = "mtc.sendAndWait",
+            ReadOnly = false,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["command"] = new("string", "Command text to submit to the game."),
+                ["appendEnter"] = new("boolean", "Append a carriage return to the command (default true)."),
+                ["timeoutSeconds"] = new("number", "How long to wait for the next prompt in seconds (0.5-90, default 8)."),
+            },
+            RequiredParameters = ["command"],
+        },
+        new()
+        {
             Name = "run_mombot_command",
             Description = "Run a native MTC Mombot command, e.g. 't 1234' for twarp or 'm 1234' for mow.",
             JsonRpcMethod = "mtc.runMombotCommand",

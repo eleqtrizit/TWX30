@@ -226,17 +226,19 @@ internal sealed class GameAgentRuntime : IDisposable
     public void Record(GameAgentEvent evt)
     {
         GameAgentEvent normalized = NormalizeEvent(evt);
-        bool queued;
+        bool queued = true;
         lock (_sync)
         {
-            if (_disposed || _writeQueue == null)
+            if (_disposed)
                 return;
 
+            // The in-memory ring buffer feeds every reader (context, MCP tools), so it is
+            // filled regardless of whether the replay-file writer is active.
             _recentEvents.Enqueue(normalized);
             while (_recentEvents.Count > MaxRecentEvents)
                 _recentEvents.Dequeue();
 
-            queued = _writeQueue.TryAdd(normalized);
+            queued = _writeQueue == null || _writeQueue.TryAdd(normalized);
         }
 
         if (!queued)

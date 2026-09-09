@@ -34,6 +34,16 @@ internal sealed class MtcRpcActionResult
         };
 }
 
+/// <summary>Result of a send-and-wait round trip: captured response lines and the terminating prompt.</summary>
+internal sealed record MtcRpcSendAndWaitResult
+{
+    public required bool Success { get; init; }
+    public required string Message { get; init; }
+    public required IReadOnlyList<string> Lines { get; init; }
+    public required string Prompt { get; init; }
+    public required bool TimedOut { get; init; }
+}
+
 internal sealed class MtcRpcBridge
 {
     public required Func<int, Task<GameAgentContextSnapshot>> GetContextAsync { get; init; }
@@ -41,6 +51,7 @@ internal sealed class MtcRpcBridge
     public required Func<int, Task<GameAgentSectorSnapshot?>> QuerySectorAsync { get; init; }
     public required Func<Task<IReadOnlyList<GameAgentRunningScriptSnapshot>>> ListScriptsAsync { get; init; }
     public required Func<string, bool, Task<MtcRpcActionResult>> SendCommandAsync { get; init; }
+    public required Func<string, bool, double, Task<MtcRpcSendAndWaitResult>> SendAndWaitAsync { get; init; }
     public required Func<string, Task<MtcRpcActionResult>> RunMombotCommandAsync { get; init; }
     public required Func<string, Task<MtcRpcActionResult>> RunScriptAsync { get; init; }
     public required Func<int?, string?, Task<MtcRpcActionResult>> StopScriptAsync { get; init; }
