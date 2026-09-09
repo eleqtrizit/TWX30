@@ -23,7 +23,11 @@ internal sealed class MtcJsonRpcServer : IDisposable
 
     private readonly MtcRpcBridge _bridge;
     private readonly object _sync = new();
+
     private readonly Dictionary<Guid, MtcRpcWebSocketClient> _clients = [];
+
+    /// <summary>MCP endpoint sharing this server's listener, auth token, and method handlers.</summary>
+    public McpServer McpServer { get; }
 
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -34,7 +38,21 @@ internal sealed class MtcJsonRpcServer : IDisposable
     public MtcJsonRpcServer(MtcRpcBridge bridge)
     {
         _bridge = bridge;
+        McpServer = new McpServer(this);
     }
+
+    /// <summary>Auth check reused by the MCP endpoint so both surfaces share one token model.</summary>
+    /// <param name="request">The HTTP request to authorize</param>
+    /// <returns>True when the request carries a valid auth token</returns>
+    internal bool IsRequestAuthorized(HttpListenerRequest request) => IsAuthorized(request);
+
+    /// <summary>Dispatches an MCP tool call onto the same JSON-RPC method handlers used by HTTP/WebSocket clients.</summary>
+    /// <param name="method">The mtc.* method backing the tool</param>
+    /// <param name="parameters">Tool arguments, matching the JSON-RPC parameter names</param>
+    /// <param name="cancellationToken">Token cancelled when the server stops</param>
+    /// <returns>The handler result, or throws <see cref="MtcRpcException"/> for approval/parameter failures</returns>
+    internal Task<object?> InvokeForMcpAsync(string method, JsonElement? parameters, CancellationToken cancellationToken)
+        => InvokeMethodAsync(method, parameters, client: null, cancellationToken);
 
     public bool IsRunning
     {
@@ -198,6 +216,12 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
                 context.Response.Headers["WWW-Authenticate"] = "Bearer";
                 await WriteJsonAsync(context.Response, new { error = "unauthorized" }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(context.Request.Url?.AbsolutePath, McpServer.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                await McpServer.HandleAsync(context, cancellationToken).ConfigureAwait(false);
                 return;
             }
 
@@ -433,7 +457,9 @@ internal sealed class MtcJsonRpcServer : IDisposable
             {
                 string script = ReadString(parameters, "script", required: true);
                 await EnsureActionAllowedAsync("Run script", script).ConfigureAwait(false);
-                return await _bridge.RunScriptAsync(script).ConfigureAwait(false);
+                MtcRpcActionResult started = await _bridge.RunScriptAsync(script).ConfigureAwait(false);
+                McpServer.PublishScriptState("started", script, started);
+                return started;
             }
 
             case "mtc.stopScript":
@@ -444,7 +470,9 @@ internal sealed class MtcJsonRpcServer : IDisposable
                     throw new MtcRpcException(-32602, "Either id or name is required.");
 
                 await EnsureActionAllowedAsync("Stop script", id?.ToString() ?? name ?? string.Empty).ConfigureAwait(false);
-                return await _bridge.StopScriptAsync(id, name).ConfigureAwait(false);
+                MtcRpcActionResult stopped = await _bridge.StopScriptAsync(id, name).ConfigureAwait(false);
+                McpServer.PublishScriptState("stopped", id?.ToString() ?? name ?? string.Empty, stopped);
+                return stopped;
             }
 
             default:
@@ -505,6 +533,8 @@ internal sealed class MtcJsonRpcServer : IDisposable
 
         foreach (MtcRpcWebSocketClient client in clients)
             client.EnqueueEvent(evt);
+
+        McpServer.PublishEvent(evt);
     }
 
     public void PublishGameAgentEvent(GameAgentEvent evt)
@@ -635,6 +665,7 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 return;
             _disposed = true;
             StopUnderLock();
+            McpServer.Dispose();
         }
     }
 

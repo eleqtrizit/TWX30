@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Source/TWXProxy.csproj" />
+    <Compile Include="../../Source/MTC/GameAgentRuntime.cs" Link="MTC/GameAgentRuntime.cs" />
+    <Compile Include="../../Source/MTC/GameState.cs" Link="MTC/GameState.cs" />
+    <Compile Include="../../Source/MTC/ConnectionProfile.cs" Link="MTC/ConnectionProfile.cs" />
+    <Compile Include="../../Source/MTC/TerminalBuffer.cs" Link="MTC/TerminalBuffer.cs" />
+    <Compile Include="../../Source/MTC/AppPaths.cs" Link="MTC/AppPaths.cs" />
+    <Compile Include="../../Source/MTC/GameAgentCopilot.cs" Link="MTC/GameAgentCopilot.cs" />
+    <Compile Include="../../Source/MTC/GameAgentTools.cs" Link="MTC/GameAgentTools.cs" />
+    <Compile Include="../../Source/MTC/Rpc/MtcRpcModels.cs" Link="MTC/Rpc/MtcRpcModels.cs" />
+    <Compile Include="../../Source/MTC/Rpc/MtcJsonRpcServer.cs" Link="MTC/Rpc/MtcJsonRpcServer.cs" />
+    <Compile Include="../../Source/MTC/Rpc/McpServer.cs" Link="MTC/Rpc/McpServer.cs" />
+    <Compile Include="../../Source/MTC/Rpc/McpToolSchema.cs" Link="MTC/Rpc/McpToolSchema.cs" />
+    <Compile Include="../../Source/MTC/Rpc/McpSseStream.cs" Link="MTC/Rpc/McpSseStream.cs" />
+  </ItemGroup>
+
+</Project>
