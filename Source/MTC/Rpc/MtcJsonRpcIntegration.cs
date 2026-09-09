@@ -99,6 +99,9 @@ public partial class MainWindow
             RunScriptAsync = RunMtcRpcScriptAsync,
             StopScriptAsync = StopMtcRpcScriptAsync,
             ApproveActionAsync = ApproveMtcRpcActionAsync,
+            WriteScriptAsync = WriteMtcRpcScriptFileAsync,
+            EditScriptAsync = EditMtcRpcScriptFileAsync,
+            ReadScriptAsync = ReadMtcRpcScriptFileAsync,
         };
 
     private Task<GameAgentContextSnapshot> BuildMtcRpcContextAsync(int recentEventCount)
@@ -241,6 +244,147 @@ public partial class MainWindow
                 return Task.FromResult(MtcRpcActionResult.Fail(ex.Message));
             }
         });
+
+    private Task<MtcRpcActionResult> WriteMtcRpcScriptFileAsync(string path, string content)
+    {
+        string scriptRoot = ResolveEffectiveScriptDirectory();
+        if (!ScriptPathGuard.TryResolve(path, scriptRoot, out string fullPath))
+            return Task.FromResult(MtcRpcActionResult.Fail(ScriptPathRejectionMessage(path)));
+
+        try
+        {
+            string? directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
+            File.WriteAllText(fullPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            return Task.FromResult(MtcRpcActionResult.Ok("Script file written.", new Dictionary<string, string>
+            {
+                ["path"] = fullPath,
+                ["bytes"] = Encoding.UTF8.GetByteCount(content).ToString(),
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(MtcRpcActionResult.Fail(ex.Message));
+        }
+    }
+
+    private Task<MtcRpcActionResult> EditMtcRpcScriptFileAsync(string path, string oldText, string newText, bool replaceAll)
+    {
+        string scriptRoot = ResolveEffectiveScriptDirectory();
+        if (!ScriptPathGuard.TryResolve(path, scriptRoot, out string fullPath))
+            return Task.FromResult(MtcRpcActionResult.Fail(ScriptPathRejectionMessage(path)));
+
+        try
+        {
+            if (!File.Exists(fullPath))
+                return Task.FromResult(MtcRpcActionResult.Fail($"Script file not found: {path}"));
+
+            string content = ReadScriptText(fullPath);
+            int matchCount = CountOrdinalOccurrences(content, oldText);
+            if (matchCount == 0)
+                return Task.FromResult(MtcRpcActionResult.Fail("oldText not found in the script file."));
+            if (matchCount > 1 && !replaceAll)
+                return Task.FromResult(MtcRpcActionResult.Fail(
+                    $"oldText matches {matchCount} times; make oldText unique or pass replaceAll: true."));
+
+            string updated = replaceAll
+                ? content.Replace(oldText, newText, StringComparison.Ordinal)
+                : ReplaceFirstOccurrence(content, oldText, newText);
+            File.WriteAllText(fullPath, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            return Task.FromResult(MtcRpcActionResult.Ok("Script file edited.", new Dictionary<string, string>
+            {
+                ["path"] = fullPath,
+                ["matches"] = matchCount.ToString(),
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(MtcRpcActionResult.Fail(ex.Message));
+        }
+    }
+
+    private Task<MtcScriptReadResult> ReadMtcRpcScriptFileAsync(string path, int offset, int limit)
+    {
+        string scriptRoot = ResolveEffectiveScriptDirectory();
+        if (!ScriptPathGuard.TryResolve(path, scriptRoot, out string fullPath))
+            throw new MtcRpcException(-32602, ScriptPathRejectionMessage(path));
+
+        if (!File.Exists(fullPath))
+            throw new MtcRpcException(-32602, $"Script file not found: {path}");
+
+        try
+        {
+            string content = ReadScriptText(fullPath);
+            string[] lines = content.Length == 0 ? [] : content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            int effectiveOffset = Math.Max(offset, 1);
+            int effectiveLimit = Math.Max(limit, 1);
+            int start = Math.Min(effectiveOffset - 1, lines.Length);
+            int count = Math.Min(effectiveLimit, lines.Length - start);
+            var selected = new string[count];
+            for (int i = 0; i < count; i++)
+            {
+                selected[i] = lines[start + i];
+            }
+
+            return Task.FromResult(new MtcScriptReadResult
+            {
+                Path = fullPath,
+                TotalLines = lines.Length,
+                Offset = effectiveOffset,
+                Content = string.Join('\n', selected),
+            });
+        }
+        catch (Exception ex)
+        {
+            throw new MtcRpcException(-32602, ex.Message);
+        }
+    }
+
+    private static string ReadScriptText(string fullPath)
+    {
+        byte[] bytes = File.ReadAllBytes(fullPath);
+        return TryDecodeUtf8(bytes, out string utf8) ? utf8 : Encoding.Latin1.GetString(bytes);
+    }
+
+    private static bool TryDecodeUtf8(byte[] bytes, out string decoded)
+    {
+        try
+        {
+            var strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+            decoded = strictUtf8.GetString(bytes);
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            decoded = string.Empty;
+            return false;
+        }
+    }
+
+    private static int CountOrdinalOccurrences(string content, string oldText)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = content.IndexOf(oldText, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += oldText.Length;
+        }
+        return count;
+    }
+
+    private static string ReplaceFirstOccurrence(string content, string oldText, string newText)
+    {
+        int index = content.IndexOf(oldText, StringComparison.Ordinal);
+        return index < 0 ? content : string.Concat(content.AsSpan(0, index), newText, content.AsSpan(index + oldText.Length));
+    }
+
+    private static string ScriptPathRejectionMessage(string path)
+        => $"Invalid script path '{path}': the path must be relative to the scripts root and cannot escape it.";
 
     private Task<bool> ApproveMtcRpcActionAsync(string action, string details)
         => InvokeMtcRpcUiAsync(() => ShowConfirmAsync(

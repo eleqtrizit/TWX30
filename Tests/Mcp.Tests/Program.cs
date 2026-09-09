@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -34,6 +35,9 @@ var tests = new (string Name, Func<Task> Body)[]
     ("MCP SSE stream pushes game events to the agent", McpSseStreamPushesGameEvents),
     ("MCP SSE stream pushes script state changes", McpSseStreamPushesScriptState),
     ("MCP SSE stream pushes script runtime errors as scriptState error", McpSseStreamPushesScriptRuntimeErrors),
+    ("ScriptPathGuard rejects paths escaping the scripts root", () => { ScriptPathGuardRejectsEscapeAttempts(); return Task.CompletedTask; }),
+    ("ScriptPathGuard accepts contained relative paths", () => { ScriptPathGuardAcceptsRelativePaths(); return Task.CompletedTask; }),
+    ("ScriptPathGuard IsInsideRoot boundaries", () => { ScriptPathGuardInsideRootBoundaries(); return Task.CompletedTask; }),
 };
 
 int failed = 0;
@@ -178,6 +182,9 @@ async Task McpToolsListAdvertisesAllTools()
             "send_command",
             "run_mombot_command",
             "run_script",
+            "write_script",
+            "edit_script",
+            "read_script",
             "stop_script",
         ];
         Assert(names.SequenceEqual(expected), $"tool names mismatch: {string.Join(',', names)}");
@@ -361,7 +368,7 @@ async Task JsonRpcHttpPostStillWorks()
 async Task ToolSchemaMapsEveryToolOntoJsonRpc()
 {
     McpToolDescriptor[] tools = McpToolSchema.DescribeTools().ToArray();
-    Assert(tools.Length == 10, $"expected 10 tools, got {tools.Length}");
+    Assert(tools.Length == 13, $"expected 13 tools, got {tools.Length}");
     foreach (McpToolDescriptor tool in tools)
     {
         Assert(tool.JsonRpcMethod.StartsWith("mtc.", StringComparison.Ordinal), $"{tool.Name} must map onto an mtc.* method");
@@ -369,7 +376,7 @@ async Task ToolSchemaMapsEveryToolOntoJsonRpc()
         Assert(McpToolSchema.BuildInputSchema(tool) != null, $"{tool.Name} needs an input schema");
     }
 
-    Assert(tools.Count(tool => !tool.ReadOnly) == 4, "exactly the four mutating tools are marked non-readonly");
+    Assert(tools.Count(tool => !tool.ReadOnly) == 6, "exactly the six mutating tools are marked non-readonly");
 }
 
 async Task RunAndStopScriptHandlersWork()
@@ -526,6 +533,62 @@ static async Task<string> ReadSseUntil(System.IO.Stream stream, string needle)
     return builder.ToString();
 }
 
+
+// ---------------------------------------------------------------------------
+// ScriptPathGuard tests
+// ---------------------------------------------------------------------------
+
+static ScriptPathGuardHarness NewGuardHarness()
+{
+    string root = Path.Combine(Path.GetTempPath(), "twx-guard-tests", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    return new ScriptPathGuardHarness(root);
+}
+
+static void ScriptPathGuardRejectsEscapeAttempts()
+{
+    var harness = NewGuardHarness();
+    string[] rejected = ["../../evil.ts", "..\\..\\evil.ts", "/etc/passwd", "C:\\x.ts", "//unc/share/x", "..", 
+        "a/../../b.ts", "Subdir/../../../outside.ts", "sub\0null.ts"];
+
+    foreach (string candidate in rejected)
+        Assert(!ScriptPathGuard.TryResolve(candidate, harness.Root, out _), $"must reject '{candidate}'");
+
+    Assert(!ScriptPathGuard.TryResolve("   ", harness.Root, out _), "must reject whitespace-only path");
+}
+
+static void ScriptPathGuardAcceptsRelativePaths()
+{
+    var harness = NewGuardHarness();
+    var expected = new Dictionary<string, string>
+    {
+        ["Pack2/2_Find.ts"] = Path.Combine(harness.Root, "Pack2", "2_Find.ts"),
+        ["include/header.ts"] = Path.Combine(harness.Root, "include", "header.ts"),
+        ["a/b/c.ts"] = Path.Combine(harness.Root, "a", "b", "c.ts"),
+        ["./x.ts"] = Path.Combine(harness.Root, "x.ts"),
+    };
+
+    foreach ((string candidate, string wanted) in expected)
+    {
+        bool resolved = ScriptPathGuard.TryResolve(candidate, harness.Root, out string fullPath);
+        Assert(resolved, $"must accept '{candidate}'");
+        Assert(string.Equals(fullPath, wanted, StringComparison.Ordinal), 
+            $"'{candidate}' resolved to '{fullPath}', expected '{wanted}'");
+    }
+}
+
+static void ScriptPathGuardInsideRootBoundaries()
+{
+    var harness = NewGuardHarness();
+    Assert(ScriptPathGuard.IsInsideRoot(harness.Root, harness.Root), "root itself counts as inside");
+    Assert(ScriptPathGuard.IsInsideRoot(Path.Combine(harness.Root, "x.ts"), harness.Root), "root/x.ts is inside");
+    string sibling = harness.Root + "2";
+    Assert(!ScriptPathGuard.IsInsideRoot(sibling, harness.Root), "prefix-only sibling root must not count as inside");
+    Assert(!ScriptPathGuard.IsInsideRoot(Path.Combine(sibling, "x.ts"), harness.Root), "sibling contents must not count as inside");
+    Assert(!ScriptPathGuard.IsInsideRoot(string.Empty, harness.Root), "empty path is not inside");
+    Assert(!ScriptPathGuard.IsInsideRoot(Path.Combine(harness.Root, "x.ts"), string.Empty), "empty root rejects everything");
+}
+
 internal sealed record McpHarness(MtcJsonRpcServer Server, HttpClient Client, StubBridge Stub)
 {
     private const string AuthToken = "test-token";
@@ -609,9 +672,30 @@ internal sealed class StubBridge
                 ApprovalRequests++;
                 return Task.FromResult(ApprovalDecision);
             },
+            WriteScriptAsync = (path, content) => Task.FromResult(MtcRpcActionResult.Ok($"write: {path}")),
+            EditScriptAsync = (path, _, _, _) => Task.FromResult(MtcRpcActionResult.Ok($"edit: {path}")),
+            ReadScriptAsync = (path, offset, limit) => Task.FromResult(new MtcScriptReadResult
+            {
+                Path = path,
+                TotalLines = 1,
+                Offset = offset,
+                Content = $"read: {path} offset={offset} limit={limit}",
+            }),
         };
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+// <summary>Holds a freshly created temporary scripts root and cleans it up.</summary>
+internal sealed class ScriptPathGuardHarness
+{
+    public ScriptPathGuardHarness(string root)
+    {
+        Root = root;
+    }
+
+    public string Root { get; }
+}
+

@@ -89,6 +89,18 @@ internal sealed class MtcRpcBridge
     public required Func<string, Task<MtcRpcActionResult>> RunScriptAsync { get; init; }
     public required Func<int?, string?, Task<MtcRpcActionResult>> StopScriptAsync { get; init; }
     public required Func<string, string, Task<bool>> ApproveActionAsync { get; init; }
+    public required Func<string, string, Task<MtcRpcActionResult>> WriteScriptAsync { get; init; }
+    public required Func<string, string, string, bool, Task<MtcRpcActionResult>> EditScriptAsync { get; init; }
+    public required Func<string, int, int, Task<MtcScriptReadResult>> ReadScriptAsync { get; init; }
+}
+
+/// <summary>Result of a script file read: sliced lines plus metadata for the agent.</summary>
+internal sealed record MtcScriptReadResult
+{
+    public required string Path { get; init; }
+    public required int TotalLines { get; init; }
+    public required int Offset { get; init; }
+    public required string Content { get; init; }
 }
 
 internal sealed class MtcRpcException : Exception

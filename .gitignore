@@ -58,3 +58,7 @@ Source/test/
 
 # Local AI/copilot experiments and generated training data
 tradewars-copilot/
+
+# Local AI agent session logs
+.pi/
+__pycache__/

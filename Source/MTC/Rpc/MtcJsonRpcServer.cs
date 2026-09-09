@@ -453,6 +453,32 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 return await _bridge.RunMombotCommandAsync(command).ConfigureAwait(false);
             }
 
+            case "mtc.readScript":
+            {
+                string path = ReadString(parameters, "path", required: true);
+                int offset = ReadInt(parameters, "offset", 1, 1, int.MaxValue);
+                int limit = ReadInt(parameters, "limit", 2000, 1, int.MaxValue);
+                return await _bridge.ReadScriptAsync(path, offset, limit).ConfigureAwait(false);
+            }
+
+            case "mtc.writeScript":
+            {
+                string path = ReadString(parameters, "path", required: true);
+                string content = ReadString(parameters, "content", required: true);
+                await EnsureActionAllowedAsync("Write script", path).ConfigureAwait(false);
+                return await _bridge.WriteScriptAsync(path, content).ConfigureAwait(false);
+            }
+
+            case "mtc.editScript":
+            {
+                string path = ReadString(parameters, "path", required: true);
+                string oldText = ReadString(parameters, "oldText", required: true);
+                string newText = ReadString(parameters, "newText", required: true);
+                bool replaceAll = ReadBool(parameters, "replaceAll", false);
+                await EnsureActionAllowedAsync("Edit script", path).ConfigureAwait(false);
+                return await _bridge.EditScriptAsync(path, oldText, newText, replaceAll).ConfigureAwait(false);
+            }
+
             case "mtc.runScript":
             {
                 string script = ReadString(parameters, "script", required: true);
@@ -507,6 +533,9 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 "mtc.runMombotCommand",
                 "mtc.runScript",
                 "mtc.stopScript",
+                "mtc.writeScript",
+                "mtc.editScript",
+                "mtc.readScript",
             },
         };
     }

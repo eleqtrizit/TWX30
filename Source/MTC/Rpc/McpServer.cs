@@ -242,7 +242,11 @@ internal sealed class McpServer
             serverInfo = new { name = ServerName, version = ServerVersion },
             instructions = "MTC Trade Wars proxy MCP endpoint. Read tools inspect live game state and the local database. " +
                            "Mutating tools (send_command, run_mombot_command, run_script, stop_script) are gated by the " +
-                           "approval level configured in the MTC client.",
+                           "approval level configured in the MTC client. " +
+                           "Script authoring tools (read_script, write_script, edit_script) read and write TWX script files; " +
+                           "their 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts'), forward " +
+                           "slashes are accepted, and any path escaping the scripts root is rejected. " +
+                           "write_script and edit_script are gated by the approval level.",
         };
 
     private async Task<object> CallToolAsync(JsonElement? parameters, CancellationToken cancellationToken)

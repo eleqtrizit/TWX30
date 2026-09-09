@@ -145,6 +145,48 @@ internal static class McpToolSchema
         },
         new()
         {
+            Name = "write_script",
+            Description = "Create or overwrite a TWX script source file. The 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts' or 'include/header.ts'); forward slashes are accepted; paths escaping the scripts root are rejected. Subject to the configured approval level.",
+            JsonRpcMethod = "mtc.writeScript",
+            ReadOnly = false,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["path"] = new("string", "Path relative to the scripts root directory."),
+                ["content"] = new("string", "Full file content to write (UTF-8, no BOM)."),
+            },
+            RequiredParameters = ["path", "content"],
+        },
+        new()
+        {
+            Name = "edit_script",
+            Description = "Replace text in an existing TWX script source file. The 'path' argument is RELATIVE to the scripts root directory; paths escaping the scripts root are rejected. Replaces all occurrences when replaceAll is true, otherwise requires a unique match. Subject to the configured approval level.",
+            JsonRpcMethod = "mtc.editScript",
+            ReadOnly = false,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["path"] = new("string", "Path relative to the scripts root directory."),
+                ["oldText"] = new("string", "Exact text to replace (ordinal comparison)."),
+                ["newText"] = new("string", "Replacement text."),
+                ["replaceAll"] = new("boolean", "Replace every occurrence instead of requiring a unique match (default false)."),
+            },
+            RequiredParameters = ["path", "oldText", "newText"],
+        },
+        new()
+        {
+            Name = "read_script",
+            Description = "Read a TWX script source file as text. The 'path' argument is RELATIVE to the scripts root directory; paths escaping the scripts root are rejected.",
+            JsonRpcMethod = "mtc.readScript",
+            ReadOnly = true,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["path"] = new("string", "Path relative to the scripts root directory."),
+                ["offset"] = new("integer", "1-based starting line number (default 1)."),
+                ["limit"] = new("integer", "Maximum number of lines to return (default 2000)."),
+            },
+            RequiredParameters = ["path"],
+        },
+        new()
+        {
             Name = "stop_script",
             Description = "Stop a running script by interpreter id or script name. Subject to the configured approval level.",
             JsonRpcMethod = "mtc.stopScript",

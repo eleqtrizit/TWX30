@@ -21,6 +21,7 @@
     <Compile Include="../../Source/MTC/Rpc/MtcJsonRpcServer.cs" Link="MTC/Rpc/MtcJsonRpcServer.cs" />
     <Compile Include="../../Source/MTC/Rpc/McpServer.cs" Link="MTC/Rpc/McpServer.cs" />
     <Compile Include="../../Source/MTC/Rpc/McpToolSchema.cs" Link="MTC/Rpc/McpToolSchema.cs" />
+    <Compile Include="../../Source/MTC/Rpc/ScriptPathGuard.cs" Link="MTC/Rpc/ScriptPathGuard.cs" />
     <Compile Include="../../Source/MTC/Rpc/McpSseStream.cs" Link="MTC/Rpc/McpSseStream.cs" />
   </ItemGroup>
 
