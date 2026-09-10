@@ -139,6 +139,7 @@ public partial class MainWindow
             WriteScriptAsync = WriteMtcRpcScriptFileAsync,
             EditScriptAsync = EditMtcRpcScriptFileAsync,
             ReadScriptAsync = ReadMtcRpcScriptFileAsync,
+            CompileScriptAsync = CompileMtcRpcScriptAsync,
         };
 
     private Task<GameAgentContextSnapshot> BuildMtcRpcContextAsync(int recentEventCount)
@@ -382,11 +383,75 @@ public partial class MainWindow
             }
         });
 
+    /// <summary>
+    /// Compiles a TWX script source file in-process with <see cref="Core.ScriptCmp"/>, mirroring
+    /// TWXC's default (pruned) mode. Writes the .cts next to the source when <paramref name="run"/>
+    /// is true; otherwise performs a check-only compile pass. Uses an atomic temp-file move so a
+    /// failed write never leaves a truncated .cts behind.
+    /// </summary>
+    /// <param name="path">Source path relative to the scripts root directory</param>
+    /// <param name="run">True to write the compiled .cts; false for a check-only pass</param>
+    /// <returns>Compiler result: diagnostics on failure, code size / lines / definitions on success</returns>
+    private Task<MtcRpcActionResult> CompileMtcRpcScriptAsync(string path, bool run)
+    {
+        string scriptRoot = ResolveEffectiveScriptDirectory();
+        if (!ScriptPathGuard.TryResolve(path, scriptRoot, out string fullPath))
+            return Task.FromResult(MtcRpcActionResult.Fail(ScriptPathRejectionMessage(path, scriptRoot)));
+
+        if (!File.Exists(fullPath))
+            return Task.FromResult(MtcRpcActionResult.Fail(ScriptNotFoundMessage(path, scriptRoot)));
+
+        try
+        {
+            using var scriptCmp = new Core.ScriptCmp(new Core.ScriptRef(), scriptRoot);
+            scriptCmp.PruneBytecode = true;
+            scriptCmp.CompileFromFile(fullPath, descFile: string.Empty);
+
+            if (!run)
+            {
+                return Task.FromResult(MtcRpcActionResult.Ok(
+                    "Compilation successful (check only; no file written).", new Dictionary<string, string>
+                    {
+                        ["codeSize"] = scriptCmp.CodeSize.ToString(),
+                        ["lines"] = scriptCmp.LineCount.ToString(),
+                        ["definitions"] = scriptCmp.ParamCount.ToString(),
+                    }));
+            }
+
+            string ctsFile = Path.ChangeExtension(fullPath, ".cts");
+            string outputDir = Path.GetDirectoryName(Path.GetFullPath(ctsFile)) ?? scriptRoot;
+            string tempFile = Path.Combine(outputDir, $".{Path.GetFileName(ctsFile)}.{Guid.NewGuid():N}.tmp");
+            try
+            {
+                scriptCmp.WriteToFile(tempFile);
+                File.Move(tempFile, ctsFile, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                    File.Delete(tempFile);
+            }
+
+            return Task.FromResult(MtcRpcActionResult.Ok(
+                $"Compilation successful; wrote {Path.GetFileName(ctsFile)}.", new Dictionary<string, string>
+                {
+                    ["output"] = ctsFile,
+                    ["codeSize"] = scriptCmp.CodeSize.ToString(),
+                    ["lines"] = scriptCmp.LineCount.ToString(),
+                    ["definitions"] = scriptCmp.ParamCount.ToString(),
+                }));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(MtcRpcActionResult.Fail($"Compilation failed: {ex.Message}"));
+        }
+    }
+
     private Task<MtcRpcActionResult> WriteMtcRpcScriptFileAsync(string path, string content)
     {
         string scriptRoot = ResolveEffectiveScriptDirectory();
         if (!ScriptPathGuard.TryResolve(path, scriptRoot, out string fullPath))
-            return Task.FromResult(MtcRpcActionResult.Fail(ScriptPathRejectionMessage(path)));
+            return Task.FromResult(MtcRpcActionResult.Fail(ScriptPathRejectionMessage(path, scriptRoot)));
 
         try
         {
@@ -412,12 +477,12 @@ public partial class MainWindow
     {
         string scriptRoot = ResolveEffectiveScriptDirectory();
         if (!ScriptPathGuard.TryResolve(path, scriptRoot, out string fullPath))
-            return Task.FromResult(MtcRpcActionResult.Fail(ScriptPathRejectionMessage(path)));
+            return Task.FromResult(MtcRpcActionResult.Fail(ScriptPathRejectionMessage(path, scriptRoot)));
 
         try
         {
             if (!File.Exists(fullPath))
-                return Task.FromResult(MtcRpcActionResult.Fail($"Script file not found: {path}"));
+                return Task.FromResult(MtcRpcActionResult.Fail(ScriptNotFoundMessage(path, scriptRoot)));
 
             string content = ReadScriptText(fullPath);
             int matchCount = CountOrdinalOccurrences(content, oldText);
@@ -448,10 +513,10 @@ public partial class MainWindow
     {
         string scriptRoot = ResolveEffectiveScriptDirectory();
         if (!ScriptPathGuard.TryResolve(path, scriptRoot, out string fullPath))
-            throw new MtcRpcException(-32602, ScriptPathRejectionMessage(path));
+            throw new MtcRpcException(-32602, ScriptPathRejectionMessage(path, scriptRoot));
 
         if (!File.Exists(fullPath))
-            throw new MtcRpcException(-32602, $"Script file not found: {path}");
+            throw new MtcRpcException(-32602, ScriptNotFoundMessage(path, scriptRoot));
 
         try
         {
@@ -520,8 +585,11 @@ public partial class MainWindow
         return index < 0 ? content : string.Concat(content.AsSpan(0, index), newText, content.AsSpan(index + oldText.Length));
     }
 
-    private static string ScriptPathRejectionMessage(string path)
-        => $"Invalid script path '{path}': the path must be relative to the scripts root and cannot escape it.";
+    private static string ScriptPathRejectionMessage(string path, string scriptRoot)
+        => $"Invalid script path '{path}': script paths are relative to the configured script directory '{scriptRoot}' and cannot escape it.";
+
+    private static string ScriptNotFoundMessage(string path, string scriptRoot)
+        => $"Script file not found: '{path}' does not exist within the configured script directory '{scriptRoot}'.";
 
     private async Task<MtcRpcActionResult> ConnectMtcRpcServerAsync(string? host, int? port)
     {

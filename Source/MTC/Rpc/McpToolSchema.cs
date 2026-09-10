@@ -223,6 +223,19 @@ internal static class McpToolSchema
         },
         new()
         {
+            Name = "compile_script",
+            Description = "Compile a TWX script source file (.ts) with the TWX compiler to check it compiles, and optionally write the compiled .cts next to it so run_script can start it. The 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts'); paths escaping the scripts root are rejected. Returns compiler diagnostics on failure and code size / line / definition counts on success.",
+            JsonRpcMethod = "mtc.compileScript",
+            ReadOnly = false,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["path"] = new("string", "Path of the .ts source file relative to the scripts root directory."),
+                ["run"] = new("boolean", "When true (default), writes the compiled .cts next to the source file. When false, only checks compilation and writes nothing."),
+            },
+            RequiredParameters = ["path"],
+        },
+        new()
+        {
             Name = "stop_script",
             Description = "Stop a running script by interpreter id or script name.",
             JsonRpcMethod = "mtc.stopScript",

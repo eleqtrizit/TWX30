@@ -60,6 +60,7 @@ internal sealed class MtcRpcBridge
     public required Func<string, string, Task<MtcRpcActionResult>> WriteScriptAsync { get; init; }
     public required Func<string, string, string, bool, Task<MtcRpcActionResult>> EditScriptAsync { get; init; }
     public required Func<string, int, int, Task<MtcScriptReadResult>> ReadScriptAsync { get; init; }
+    public required Func<string, bool, Task<MtcRpcActionResult>> CompileScriptAsync { get; init; }
 }
 
 /// <summary>Result of a script file read: sliced lines plus metadata for the agent.</summary>

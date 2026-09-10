@@ -462,6 +462,13 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 return await _bridge.EditScriptAsync(path, oldText, newText, replaceAll).ConfigureAwait(false);
             }
 
+            case "mtc.compileScript":
+            {
+                string path = ReadString(parameters, "path", required: true);
+                bool run = ReadBool(parameters, "run", true);
+                return await _bridge.CompileScriptAsync(path, run).ConfigureAwait(false);
+            }
+
             case "mtc.runScript":
             {
                 string script = ReadString(parameters, "script", required: true);
@@ -518,6 +525,7 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 "mtc.writeScript",
                 "mtc.editScript",
                 "mtc.readScript",
+                "mtc.compileScript",
             },
         };
     }

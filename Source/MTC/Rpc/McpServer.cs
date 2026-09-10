@@ -244,6 +244,8 @@ internal sealed class McpServer
                            "Connection-dependent tools return 'Connect to server, first.' until connect_server succeeds; " +
                            "disconnect_server ends the session. " +
                            "Script authoring tools (read_script, write_script, edit_script) read and write TWX script files; " +
+                           "compile_script checks a .ts script compiles via the TWX compiler (compiler diagnostics on failure, " +
+                           "code size on success); compile_script with run=true (default) also writes the .cts so run_script can start it; " +
                            "their 'path' argument is RELATIVE to the scripts root directory (e.g. 'Pack2/2_Find.ts'), forward " +
                            "slashes are accepted, and any path escaping the scripts root is rejected. " +
                            "write_script and edit_script are gated by the approval level.",
