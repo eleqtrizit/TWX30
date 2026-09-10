@@ -16,6 +16,11 @@ C#/.NET rewrite of the classic TWX Proxy helper for Trade Wars 2002.
 
 Build details, project layout, and tooling notes: see `Source/README.md`.
 
+## Scripting references
+
+- `TWX_SCRIPTING_GUIDE.md` — guide to the TWX script language (commands, syntax, triggers) and how it executes in TWXProxy. Read before writing or debugging `.ts`/`.cts` scripts.
+- `SCRIPT_INVENTORY.md` — one-line description of every bundled script in `scripts/` (Pack1/Pack2, LoneStar, Promethius, RammaR, Oz, mombot suite) and the shared `include/` libraries. Consult it to find an existing script or helper before authoring a new one.
+
 ## Starting the MTC client — single copy, no respawn
 
 When you (the agent) need the MTC app running (e.g. to use the `mtc_*` tools):
