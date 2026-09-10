@@ -396,7 +396,44 @@ parameter kinds).
 
 ---
 
-## 12. Writing a new script — checklist
+## 12. Reuse first — check before you write
+
+The `scripts/` tree already contains decades of working TWX code. A new script
+should almost never implement movement, trading, mapping, combat, or gridding
+from scratch.
+
+1. **Start with `SCRIPT_INVENTORY.md`** — every bundled script has a one-line
+   description plus its trigger point. Find the capability you need before
+   writing anything.
+2. **Steal houses, not wheels:**
+   - Movement/warping: `scripts/include/move.ts`, `scripts/include/Warp.ts`
+   - Port trading/haggling: `scripts/include/haggle.ts`,
+     `scripts/mombot/include/haggle.ts` (and the native engine, §14)
+   - Sell/steal/transport (evil money-making): `scripts/include/SSM.ts`,
+     `SST.ts`, `SellSteal.ts`
+   - Colonise/upgrade planets: `scripts/include/Colonise.ts`, `MassColonise.ts`,
+     `MassUpgrade.ts`, `PlanetUpgrade.ts`
+   - Product logistics: `scripts/include/FindProduct.ts`, `Gather.ts`,
+     `MoveProduct.ts`
+   - ZTM/mapping: `1_ZTMFast.ts`, `pro_ZTM4.ts`, `ls_ZTM_11.cts`
+   - Bot primitives (deploy, twarp, CIM, tab scans, refurb): mombot commands in
+     `scripts/mombot/commands/` and `scripts/mombot/include/` modules
+3. **Prefer composition over copying.** Wrap an existing script or `gosub`
+   into an include routine with the `:ns~label` convention (§7). Do not paste
+   subroutine bodies into a new script — copies drift and clobber shared
+   variables.
+4. **Only re-implement when the existing one truly doesn't fit** (wrong
+   transport mode, hostile variable savestate, dead code). When you do, say so
+   in the header comments and link the script you replaced.
+5. **Binary-only scripts are still readable.** Existing community packs ship
+   only `.cts`; decompile with TWXD (§2) to study or lift logic, as was done to
+   build `SCRIPT_INVENTORY.md`.
+6. **Mind the compatibility surface** when chaining: saved vars (`loadVar`/
+   `saveVar`) persist across scripts and games; `GAMENAME`-suffixed data files
+   are shared; and each script assumes a specific starting prompt (see the
+   inventory's trigger points).
+
+## 13. Writing a new script — checklist
 
 1. Create `scripts/<Pack>/<n>_<Name>.ts` (or add to an existing pack).
 2. Copy the header block: copyright comment, then `Author / Description /
@@ -434,7 +471,7 @@ parameter kinds).
 
 ---
 
-## 13. Testing scripts against a live game (verified workflow)
+## 14. Testing scripts against a live game (verified workflow)
 
 1. Author `.ts`, then compile with TWXC (`twxc path.ts`). The compiler catches
    unknown commands, bad parameter counts, and undefined labels — constant
@@ -469,7 +506,7 @@ WAITON "Command [TL="
 HALT
 ```
 
-## 14. Where to look in the source
+## 15. Where to look in the source
 
 | Area | File |
 |---|---|
