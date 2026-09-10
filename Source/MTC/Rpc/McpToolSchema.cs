@@ -135,6 +135,28 @@ internal static class McpToolSchema
         },
         new()
         {
+            Name = "mombot_status",
+            Description = "Read the structured Mombot status: enabled, auto-start, attached, watcher state, accepted command routes (self/subspace/private), bot name, team name, subspace channel, current sector, mode, last loaded module, script root, authorized users, and game connection state.",
+            JsonRpcMethod = "mtc.getMombotStatus",
+            ReadOnly = true,
+            Parameters = NoParameters,
+            RequiredParameters = [],
+        },
+        new()
+        {
+            Name = "send_mombot_page",
+            Description = "Send a Mombot command as an in-game subspace page (quote line addressed to the bot) through the game stream, and optionally collect the bot's response lines. Use this to control the running bot remotely. Use run_mombot_command instead for local (non-game-stream) native commands.",
+            JsonRpcMethod = "mtc.sendMombotPage",
+            ReadOnly = false,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["command"] = new("string", "The Mombot command with parameters to page, e.g. 'cim 2 3' or 'status'."),
+                ["waitSeconds"] = new("number", "Seconds to wait and collect the bot's response lines (0 = fire and forget, default 0, max 90)."),
+            },
+            RequiredParameters = ["command"],
+        },
+        new()
+        {
             Name = "run_mombot_command",
             Description = "Run a native MTC Mombot command, e.g. 't 1234' for twarp or 'm 1234' for mow.",
             JsonRpcMethod = "mtc.runMombotCommand",

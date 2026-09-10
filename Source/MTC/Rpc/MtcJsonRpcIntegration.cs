@@ -131,6 +131,8 @@ public partial class MainWindow
             ListScriptsAsync = ListMtcRpcScriptsAsync,
             SendCommandAsync = SendMtcRpcCommandAsync,
             SendAndWaitAsync = SendMtcRpcSendAndWaitAsync,
+            GetMombotStatusAsync = GetMtcRpcMombotStatusAsync,
+            SendMombotPageAsync = SendMtcRpcMombotPageAsync,
             RunMombotCommandAsync = ExecuteGameAgentMombotCommandAsync,
             RunScriptAsync = RunMtcRpcScriptAsync,
             StopScriptAsync = StopMtcRpcScriptAsync,
@@ -269,6 +271,73 @@ public partial class MainWindow
             Prompt = prompt,
             TimedOut = timedOut,
         };
+    }
+
+    /// <summary>Builds the structured Mombot status snapshot for the mombot_status tool.</summary>
+    private Task<MombotRpcStatusSnapshot> GetMtcRpcMombotStatusAsync()
+        => InvokeMtcRpcUiAsync(() =>
+        {
+            MTC.mombot.mombotStatusSnapshot snapshot = _mombot.GetStatusSnapshot();
+            return Task.FromResult(new MombotRpcStatusSnapshot(
+                Enabled: snapshot.Enabled,
+                AutoStart: snapshot.AutoStart,
+                Attached: snapshot.IsAttached,
+                WatcherEnabled: snapshot.WatcherEnabled,
+                WatcherAttached: snapshot.WatcherAttached,
+                AcceptSelfCommands: snapshot.AcceptSelfCommands,
+                AcceptSubspaceCommands: snapshot.AcceptSubspaceCommands,
+                AcceptPrivateCommands: snapshot.AcceptPrivateCommands,
+                BotName: snapshot.BotName,
+                TeamName: snapshot.TeamName,
+                SubspaceChannel: snapshot.SubspaceChannel,
+                CurrentSector: snapshot.CurrentSector,
+                Mode: snapshot.Mode,
+                LastLoadedModule: snapshot.LastLoadedModule,
+                ScriptRoot: snapshot.ScriptRoot,
+                AuthorizedUsers: snapshot.AuthorizedUsers,
+                GameConnected: _gameInstance?.IsConnected == true || _telnet.IsConnected,
+                ExternalBotName: _gameInstance?.ActiveBotName ?? string.Empty));
+        });
+
+    /// <summary>Sends an in-game subspace page command to the Mombot through the game stream
+    /// (a quote line addressed to the bot name), then optionally collects the bot's response
+    /// for up to the requested wait window.</summary>
+    private async Task<MtcRpcSendAndWaitResult> SendMtcRpcMombotPageAsync(string command, double waitSeconds)
+    {
+        string input = (command ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(input))
+            throw new MtcRpcException(-32602, "Mombot command is required.");
+
+        return await InvokeMtcRpcUiAsync(async () =>
+        {
+            MTC.mombot.mombotStatusSnapshot snapshot = _mombot.GetStatusSnapshot();
+            if (!snapshot.Enabled)
+                return new MtcRpcSendAndWaitResult { Success = false, Message = "Native MTC Mombot is not enabled.", Lines = [], Prompt = string.Empty, TimedOut = true };
+            if (_gameInstance == null || !_gameInstance.IsConnected)
+                return new MtcRpcSendAndWaitResult { Success = false, Message = "Connect to server, first.", Lines = [], Prompt = string.Empty, TimedOut = true };
+
+            string botName = string.IsNullOrWhiteSpace(snapshot.BotName) ? "mombot" : snapshot.BotName;
+            string pageLine = $"'{botName} {input}";
+            long watermark = GetLastGameAgentEventTicks();
+            await _gameInstance.SendToServerAsync(System.Text.Encoding.ASCII.GetBytes(pageLine + "\r")).ConfigureAwait(true);
+
+            if (waitSeconds <= 0)
+                return new MtcRpcSendAndWaitResult { Success = true, Message = $"Page sent: {pageLine}", Lines = [], Prompt = string.Empty, TimedOut = false };
+
+            var deadline = TimeSpan.FromSeconds(Math.Clamp(waitSeconds, 0.5, 90));
+            await Task.Delay(deadline).ConfigureAwait(true);
+            (List<string> lines, string _, long _) = CollectEventsSince(watermark);
+            return new MtcRpcSendAndWaitResult
+            {
+                Success = true,
+                Message = lines.Count == 0
+                    ? $"Page sent: {pageLine}. No response captured within {deadline.TotalSeconds:0.#}s."
+                    : $"Page sent: {pageLine}. Extracted {lines.Count} bot response lines.",
+                Lines = lines,
+                Prompt = string.Empty,
+                TimedOut = lines.Count == 0,
+            };
+        }).ConfigureAwait(false);
     }
 
     private long GetLastGameAgentEventTicks()

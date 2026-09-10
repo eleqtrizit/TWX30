@@ -20,6 +20,7 @@ Build details, project layout, and tooling notes: see `Source/README.md`.
 
 - `TWX_SCRIPTING_GUIDE.md` — guide to the TWX script language (commands, syntax, triggers) and how it executes in TWXProxy. Read before writing or debugging `.ts`/`.cts` scripts.
 - `SCRIPT_INVENTORY.md` — one-line description of every bundled script in `scripts/` (Pack1/Pack2, LoneStar, Promethius, RammaR, Oz, mombot suite) and the shared `include/` libraries. Consult it to find an existing script or helper before authoring a new one.
+- `MOMBOT.md` — MOMBot (Mind Over Matter Bot) agent reference: how to address the bot (self/subspace/private routes), its modes, full command catalog, daemons, and the MCP tools (`mombot_status`, `send_mombot_page`, `run_mombot_command`) used to control it. Read this before driving the bot via MCP.
 
 ## Starting the MTC client — single copy, no respawn
 

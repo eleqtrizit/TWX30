@@ -44,6 +44,28 @@ internal sealed record MtcRpcSendAndWaitResult
     public required bool TimedOut { get; init; }
 }
 
+/// <summary>Structured Mombot status for the mombot_status MCP tool: bot config, session
+/// vars the bot engine tracks, and the surrounding game connection state.</summary>
+internal sealed record MombotRpcStatusSnapshot(
+    bool Enabled,
+    bool AutoStart,
+    bool Attached,
+    bool WatcherEnabled,
+    bool WatcherAttached,
+    bool AcceptSelfCommands,
+    bool AcceptSubspaceCommands,
+    bool AcceptPrivateCommands,
+    string BotName,
+    string TeamName,
+    int SubspaceChannel,
+    int CurrentSector,
+    string Mode,
+    string LastLoadedModule,
+    string ScriptRoot,
+    IReadOnlyList<string> AuthorizedUsers,
+    bool GameConnected,
+    string ExternalBotName);
+
 internal sealed class MtcRpcBridge
 {
     public required Func<int, Task<GameAgentContextSnapshot>> GetContextAsync { get; init; }
@@ -52,6 +74,8 @@ internal sealed class MtcRpcBridge
     public required Func<Task<IReadOnlyList<GameAgentRunningScriptSnapshot>>> ListScriptsAsync { get; init; }
     public required Func<string, bool, Task<MtcRpcActionResult>> SendCommandAsync { get; init; }
     public required Func<string, bool, double, Task<MtcRpcSendAndWaitResult>> SendAndWaitAsync { get; init; }
+    public required Func<Task<MombotRpcStatusSnapshot>> GetMombotStatusAsync { get; init; }
+    public required Func<string, double, Task<MtcRpcSendAndWaitResult>> SendMombotPageAsync { get; init; }
     public required Func<string, Task<MtcRpcActionResult>> RunMombotCommandAsync { get; init; }
     public required Func<string, Task<MtcRpcActionResult>> RunScriptAsync { get; init; }
     public required Func<int?, string?, Task<MtcRpcActionResult>> StopScriptAsync { get; init; }

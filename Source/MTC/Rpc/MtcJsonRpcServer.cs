@@ -420,6 +420,16 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 return await _bridge.SendAndWaitAsync(command, appendEnter, timeoutSeconds).ConfigureAwait(false);
             }
 
+            case "mtc.getMombotStatus":
+                return await _bridge.GetMombotStatusAsync().ConfigureAwait(false);
+
+            case "mtc.sendMombotPage":
+            {
+                string command = ReadString(parameters, "command", required: true);
+                double waitSeconds = ReadDouble(parameters, "waitSeconds", 0, 0, 90);
+                return await _bridge.SendMombotPageAsync(command, waitSeconds).ConfigureAwait(false);
+            }
+
             case "mtc.runMombotCommand":
             {
                 string command = ReadString(parameters, "command", required: true);
@@ -520,6 +530,8 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 "mtc.disconnectServer",
                 "mtc.sendCommand",
                 "mtc.runMombotCommand",
+                "mtc.getMombotStatus",
+                "mtc.sendMombotPage",
                 "mtc.runScript",
                 "mtc.stopScript",
                 "mtc.writeScript",
