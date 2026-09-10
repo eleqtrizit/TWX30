@@ -385,8 +385,8 @@ The command table (~170 commands) includes groups the pack scripts rarely use:
 - **Bot/instance management**: `openInstance`/`closeInstance` (multi-connection),
   `switchBot`, `nativeBot`, `setAutoTrigger`, `listActiveScripts`, `stopAll`.
 - **Timers**: `startTimer`/`stopTimer`/`getTimer`.
-- **Haggle**: `autoHaggle`, plus the native haggle engine
-  (see `docs/haggle-modes.md`).
+- **Haggle**: `autoHaggle`, plus the native haggle engine — which is always
+  on (see §16).
 - **System**: `diagMode`/`diagLog`, `sys_check`/`sys_fail`/`sys_kill` (assertions),
   `reqVersion`.
 
@@ -408,7 +408,7 @@ from scratch.
 2. **Steal houses, not wheels:**
    - Movement/warping: `scripts/include/move.ts`, `scripts/include/Warp.ts`
    - Port trading/haggling: `scripts/include/haggle.ts`,
-     `scripts/mombot/include/haggle.ts` (and the native engine, §14)
+     `scripts/mombot/include/haggle.ts` (and the native engine, §16)
    - Sell/steal/transport (evil money-making): `scripts/include/SSM.ts`,
      `SST.ts`, `SellSteal.ts`
    - Colonise/upgrade planets: `scripts/include/Colonise.ts`, `MassColonise.ts`,
@@ -519,3 +519,109 @@ HALT
 | Decompiler | `Source/TWXD/ScriptDecompiler.cs` |
 | Best small example scripts | `scripts/Pack1/1_KeepAlive.ts`, `scripts/Pack1/1_Move.ts`, `scripts/Pack2/2_Ping.ts` |
 | Bot architecture example | `scripts/mombot/` (daemons, modes, preload) |
+
+---
+
+## 16. Proxy-native automation: what the runtime does by itself
+
+The proxy is not a passive pipe. Several automations are built into the C#
+runtime itself and are active whether or not any script runs. Know about them
+**before** you script trade or navigation flows, or try to debug one.
+
+Catalog (details per item below):
+
+| Automation | Always on? | Sends game input? | Where |
+|---|---|---|---|
+| Native haggle engine | Yes — hard-enabled | **Yes** — answers port/planet commerce prompts | `NativeHaggleEngine.cs`, `Network.cs` |
+| AutoRecorder (DB parser) | Yes | No — observes and fills the sector DB | `AutoRecorder.cs` |
+| Auto-reconnect | Yes (default) | Reconnects the socket, no commands | `Network.cs` |
+| Trigger engine | Yes (mechanism) | Fires `onText`/`auto-trigger` segments (they send) | `Script.cs`, `ScriptCmdImpl_Triggers.cs` |
+| Expansion modules (e.g. MayhemDefender) | No — loadable | Depends on module | `Source/Modules/` |
+| Native bot (Mombot) | No — opt-in | Its `m`/`t` commands etc. | mombot suite |
+| MTC copilot | Recommendation only | **No** — hard `dryRunOnly` | `Source/MTC/GameAgentCopilot.cs` |
+
+### The native haggle engine (always on, sends input)
+
+The **native haggle engine** (`Source/Core/NativeHaggleEngine.cs`, wired into
+`Source/Core/Network.cs`) watches the raw game stream for port commerce
+prompts and answers them itself. It is hard-enabled at connection startup —
+`Network.cs: _nativeHaggle.SetEnabled(true)` — with no preference and no
+script required. Mode selectors are `Port Haggle` and `Planet Haggle`
+(Advanced Proxy Settings); the built-in defaults are `server-derived` (ports)
+and `cherokee-planet` (planets). Mode behavior is documented in
+`docs/haggle-modes.md`.
+
+### What it does
+
+After docking, the engine intercepts prompts of the form:
+
+- `How many holds of <item> do you want to sell/buy [N]?` — answers `N` or
+  the hold count it derived
+- `Your offer [X]?` — injects bid/ask counter-offers computed by its mode
+  (bid ladders such as `1393 → 1384 → 1379 …`, several answers per second)
+
+The dock/first-menu choice (`P`, `T`) is still yours (or a script's).
+Everything from the first quantity prompt to deal acceptance is the engine.
+
+### What this means for scripts (do NOT write it)
+
+- Any new script must not implement port or planet haggling from scratch:
+  `autoHaggle` plus the native engine already covers the full negotiation.
+  A script that also answers `Your offer …?` prompts will collide with the
+  engine's input mid-haggle.
+- Scripts that simply dock, wait for the trade to complete (e.g. wait on a
+  `Command [TL=` prompt after docking), and move on need no haggle logic at
+  all — the engine finishes the trade.
+
+### What this means for debugging
+
+- The engine is **not** a TWX script. It never appears in
+  `listActiveScripts` / `mtc_list_scripts`, so "no scripts running but the
+  port traded by itself" is expected behavior, not a rogue script.
+- Its footprint is visible in the terminal log (rapid machine-cadence offers
+  between port prompts) and in the statistics the MTC/TWXP status bar reads
+  (`NativeHaggleCompletedCount`, `SuccessRatePercent`, good/great/excellent
+  counters — see the `NativeHaggle*` properties in `Network.cs`).
+- A `DIVIDE`/parsing error such as `'SHIP.CREDITS[CURRENTSECTOR]' is not a
+  number` right after trading is script-side, not engine-side: the engine
+  never runs authored script code.
+
+### AutoRecorder — always-on database parsing (silent, no input)
+
+`Source/Core/AutoRecorder.cs` parses **every** line of game output — sector
+displays, density/holo scans, trader/ship listings, StarDock purchases — and
+keeps the sector database current *before* text triggers fire. Consequences:
+
+- `getSector`, `getAllCourses`, density data, and most sysconsts are always
+  fresh after on-screen activity; scripts should not re-parse the same output
+  or wait for the proxy to "catch up".
+- When the DB looks stale or wrong, suspect what the AutoRecorder saw
+  (partial ANSI lines, custom server output), not the script.
+
+### Auto-reconnect — always on by default
+
+`Network.cs` starts with `_autoReconnect = true`. On server drop the proxy
+re-establishes the socket itself and shows the `[twxp] Disconnected …`
+banner. Scripts written to detect disconnection (e.g. waiting on connection
+text) must expect the proxy to reconnect on its own; a script stuck after a
+drop is often waiting on a prompt that arrives after an automatic
+reconnect/login, not dead input.
+
+### Trigger engine — mechanism always on, scripts decide
+
+Text-trigger firing (`onText` segments, `setAutoTrigger`, `killTrigger`) is
+proxy-side and runs for every received line regardless of what appears in
+`listActiveScripts`. When unexpected keystrokes go to the game with no
+running script, always check for **armed triggers, timers, and daemons**
+(mombot `daemons/`) before suspecting native code — `listActiveScripts` does
+not list trigger state by itself.
+
+### Opt-in automations (not baked in)
+
+- **Expansion modules** (`Source/Modules/`, e.g. `MayhemDefenderModule`) hook
+  the fast server-data path via `RegisterFastServerDataResponder`. Inactive
+  until loaded.
+- **Native bot (Mombot)**: off until explicitly started; its commands
+  (`m <sector>`, `t <sector>`, …) send game input.
+- **MTC copilot**: proposes actions via MCP but is hard `dryRunOnly` — it
+  never sends keystrokes. Do not blame the copilot for anything that moved.
