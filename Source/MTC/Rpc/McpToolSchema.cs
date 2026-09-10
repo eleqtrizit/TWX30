@@ -115,7 +115,7 @@ internal static class McpToolSchema
             Parameters = new Dictionary<string, McpToolParameter>
             {
                 ["command"] = new("string", "The terminal input to send."),
-                ["appendEnter"] = new("boolean", "Append a carriage return after the command (default true)."),
+                ["appendEnter"] = new("boolean", "Append a carriage return after the command (default false)."),
             },
             RequiredParameters = ["command"],
         },
@@ -128,7 +128,7 @@ internal static class McpToolSchema
             Parameters = new Dictionary<string, McpToolParameter>
             {
                 ["command"] = new("string", "Command text to submit to the game."),
-                ["appendEnter"] = new("boolean", "Append a carriage return to the command (default true)."),
+                ["appendEnter"] = new("boolean", "Append a carriage return to the command (default false)."),
                 ["timeoutSeconds"] = new("number", "How long to wait for the next prompt in seconds (0.5-90, default 8)."),
             },
             RequiredParameters = ["command"],

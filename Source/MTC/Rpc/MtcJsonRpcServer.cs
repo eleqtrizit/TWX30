@@ -408,14 +408,14 @@ internal sealed class MtcJsonRpcServer : IDisposable
             case "mtc.sendCommand":
             {
                 string command = ReadString(parameters, "command", required: true, allowEmpty: true);
-                bool appendEnter = ReadBool(parameters, "appendEnter", true);
+                bool appendEnter = ReadBool(parameters, "appendEnter", false);
                 return await _bridge.SendCommandAsync(command, appendEnter).ConfigureAwait(false);
             }
 
             case "mtc.sendAndWait":
             {
                 string command = ReadString(parameters, "command", required: true, allowEmpty: true);
-                bool appendEnter = ReadBool(parameters, "appendEnter", true);
+                bool appendEnter = ReadBool(parameters, "appendEnter", false);
                 double timeoutSeconds = ReadDouble(parameters, "timeoutSeconds", 8, 0.5, 90);
                 return await _bridge.SendAndWaitAsync(command, appendEnter, timeoutSeconds).ConfigureAwait(false);
             }
