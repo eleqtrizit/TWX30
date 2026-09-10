@@ -14,7 +14,8 @@ Oz, Promethius, LoneStar, RammaT, mombot).
 | `scripts/Pack1/` | Original script pack, one `.ts` per script (`1_Move.ts`, `1_PortFast.ts`, …) |
 | `scripts/Pack2/` | Second pack, same style (`2_Ping.ts`, `2_Col.ts`, …) |
 | `scripts/include/` | Shared subroutines included by pack scripts (`header.ts`, `move.ts`, `haggle.ts`, …) |
-| `scripts/Oz/`, `Promethius/`, `LoneStar/`, `RammaT/` | Community packs, same language |
+| `scripts/Test/` | Live-verification scripts used to validate this guide (`1_Stats.ts`, `2_PortProbe.ts`, `3_MoveTour.ts`, `4_Verify.ts`) |
+| `scripts/Oz/`, `Promethius/`, `LoneStar/`, `RammaR/` | Community packs, same language |
 | `scripts/mombot/` | MomBot daemon-based bot (uses `daemons/`, `modes/`, `preload/`, `commands/`) |
 | `include/` | Repo-root test/demonstration scripts (`switchboard.ts`, `player.ts`) |
 
@@ -170,6 +171,29 @@ send $attack & "y1**"                     # build from variables
 
 waitOn "Command [TL="                     # macro: set trigger + pause + auto-kill
 pause                                     # wait for any pending trigger to fire
+
+TWGS input realities (verified live):
+
+- `*` inside a `send` string means **Enter (CR)** — one `*` per Enter. So
+  `send "10014*"` submits the sector like typing it and pressing Enter, and
+  `send "y1**"` sends two Enters after `y1`. The same `*` rule as in `echo`
+  (display newline) applies to both.
+- TWGS **menu prompts** (`Enter your choice [T] ?`, the Command prompt, port
+  menus) act on a single keystroke immediately — no Enter needed there.
+- TWGS **text/numeric prompts** (`How many holds of Equipment do you want to
+  buy [5]?`, `Your offer [461] ?`) need the `*`-Enter before anything happens.
+  If your script just `send`s `p`/`t` and then pauses on the commerce text,
+  the port dialogue sits waiting for input after hand-off.
+- `waitOn`/triggers only fire on **new** text arriving after they are set —
+  text already on screen (including a prompt printed before the script
+  started) does not satisfy them. If the screen is already at the prompt you
+  would wait on, generate fresh output first (a bare Enter re-displays) or
+  check instead of wait.
+- Typing a sector number that is **not adjacent** does not error out: TWGS
+  computes a shortest path and prompts `Engage the Autopilot? (Y/N/Single
+  step/Express) [Y]`. Single-step asks `Stop in this sector?` at every hop;
+  `e` then `y` (Express) runs the rest of the route without stops. Only send
+  warp numbers taken from `SECTOR.WARPS[...]`, or guard the autopilot prompt.
 ```
 
 Trigger commands — each maps output text (or events) to a label:
@@ -330,11 +354,14 @@ Categories worth knowing:
   `planetcount`, `shipcount`, `tradercount`, `updated`, `deadend`, `constellation`.
 - **Port**: `exists`, `class`, `name`, `fuel/organics/equipment` (quantities),
   `buy/sell` flags per good, `percent*`, `buildtime`, `updated`.
-- **Ship & player**: `shipnumber`, `shipclass`, `totalholds`, `oreholds`,
-  `orgholds`, `equholds`, `colholds`, `emptyholds`, `fighters`, `shields`,
-  `credits`, `turns`, `photons`, `armids`, `limpets`, `gentorps`, `cloaks`,
-  `twarptype`, `alignment`, `experience`, `scan type`, and the `CURRENT*`
-  counterparts that read the *dock* state.
+- **Ship & player (verified live: all BARE constants — no `SHIP.`/`PLAYER.`
+  prefix, no sector index)**: `CREDITS`, `FIGHTERS`, `SHIELDS`, `TOTALHOLDS`,
+  `OREHOLDS`, `ORGHOLDS`, `EQUHOLDS`, `COLHOLDS`, `EMPTYHOLDS`, `PHOTONS`,
+  `ARMIDS`, `LIMPETS`, `GENTORPS`, `TWARPTYPE`, `CLOAKS`, `SCANTYPE`,
+  `ALIGNMENT`, `EXPERIENCE`, `CORP`, `SHIPNUMBER`, `SHIPCLASS`, `TURNS`,
+  `UNLIMITEDGAME`. `SHIP.CREDITS[CURRENTSECTOR]` resolves to the literal
+  string and fails numerically at runtime ("'SHIP.CREDITS' is not a number");
+  there is no `SHIP.` prefix in the constant table at all.
 - **Session/meta**: `game`, `gamename`, `loginname`, `password`, `connected`,
   `currentline`, `currentansiline`, `rawpacket`, `sectors`, `time`, `date`,
   `version`, `stardock`, `alphacentauri`, `rylos`, `true`, `false`, `ansi_0..15`
@@ -407,7 +434,42 @@ parameter kinds).
 
 ---
 
-## 13. Where to look in the source
+## 13. Testing scripts against a live game (verified workflow)
+
+1. Author `.ts`, then compile with TWXC (`twxc path.ts`). The compiler catches
+   unknown commands, bad parameter counts, and undefined labels — constant
+   names (`CREDITS` vs `SHIP.CREDITS`) are only validated at runtime.
+2. Run from the MTC client. Script `echo` output goes to the **script
+   console**, which external automation cannot see. Two workarounds:
+   - Runtime errors ARE surfaced as game events:
+     `[Script error] <file> line <N>: Error executing command '<CMD>': ...` —
+     so a failing numeric constant shows up immediately with its line number.
+   - To "print" from a script under automation, `send` a built-up string at a
+     TWGS prompt; the game echoes it back on the prompt line where normal
+     event capture sees it. (Messy — it types into whatever prompt is live —
+     but it proves values flow.)
+3. `mtc_list_scripts` shows paused vs finished: a script that ends while the
+   game is parked mid-dialogue (e.g. a port "How many holds" prompt) leaves
+   the trader stranded; recovery needs manual prompts (`*`-Enter to accept the
+   default, then navigate out).
+4. `SECTOR.WARPINCOUNT` / `SECTOR.WARPSIN[$sector][$i]` exist alongside
+   `SECTOR.WARPCOUNT` / `SECTOR.WARPS[$sector][$i]`; both are 1-based on the
+   array index and default to `"0"` when out of range.
+5. A minimal smoke script that compiles and runs cleanly from the Command
+   prompt:
+
+```
+SETVAR $count SECTOR.WARPCOUNT[CURRENTSECTOR]
+IF ($count = 0)
+  HALT
+END
+SETVAR $dest SECTOR.WARPS[CURRENTSECTOR][1]
+SEND $dest & "*"
+WAITON "Command [TL="
+HALT
+```
+
+## 14. Where to look in the source
 
 | Area | File |
 |---|---|
