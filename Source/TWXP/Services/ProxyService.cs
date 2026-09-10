@@ -302,9 +302,7 @@ public class ProxyService : IProxyService
                 }
                 
                 string ansiChunk = TWXProxy.Core.AnsiCodes.PrepareScriptAnsiText(text);
-                bool scriptInAnsi = proxyInstance.ScriptInAnsi;
-                string plainChunk = TWXProxy.Core.AnsiCodes.StripANSIStateful(ansiChunk, ref scriptInAnsi);
-                proxyInstance.ScriptInAnsi = scriptInAnsi;
+                string plainChunk = proxyInstance.ScriptStripper.Strip(ansiChunk);
 
                 // Add to line buffers. This mirrors Pascal's extractor more closely:
                 // keep the ANSI and stripped streams in step across packet boundaries.
@@ -1010,6 +1008,6 @@ public class ProxyService : IProxyService
         public object ServerDataSync { get; } = new();
         public Queue<(string Text, byte[] Data)> PendingServerData { get; } = new();
         public bool ProcessingServerData { get; set; }
-        public bool ScriptInAnsi { get; set; }
+        public TWXProxy.Core.AnsiStripper ScriptStripper { get; } = new();
     }
 }

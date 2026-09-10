@@ -490,7 +490,7 @@ public partial class MainWindow
         // and uses Pascal prompt semantics for partial prompts.
         var serverLineBuf = new System.Text.StringBuilder();
         var serverAnsiLineBuf = new System.Text.StringBuilder();
-        bool serverScriptInAnsi = false;
+        var serverStripper = new Core.AnsiStripper();
         string lastDispatchedPartialLine = string.Empty;
         string lastDispatchedPartialAnsiLine = string.Empty;
 
@@ -647,7 +647,7 @@ public partial class MainWindow
                     Volatile.Write(ref owningTab.LastGameTrafficTicks, Stopwatch.GetTimestamp());
 
                 string ansiChunk = Core.AnsiCodes.PrepareScriptAnsiText(text);
-                string plainChunk = Core.AnsiCodes.StripANSIStateful(ansiChunk, ref serverScriptInAnsi);
+                string plainChunk = serverStripper.Strip(ansiChunk);
 
                 serverLineBuf.Append(plainChunk);
                 serverAnsiLineBuf.Append(ansiChunk);

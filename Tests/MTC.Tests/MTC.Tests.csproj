@@ -13,6 +13,9 @@
     <Compile Include="../../Source/MTC/GameSizeLimits.cs" Link="MTC/GameSizeLimits.cs" />
     <Compile Include="../../Source/MTC/NativeMombotStartupBridge.cs" Link="MTC/NativeMombotStartupBridge.cs" />
     <Compile Include="../../Source/MTC/TerminalBuffer.cs" Link="MTC/TerminalBuffer.cs" />
+    <Compile Include="../../Source/MTC/TelnetLineBuilder.cs" Link="MTC/TelnetLineBuilder.cs" />
+    <Compile Include="../../Source/Core/Ansi.cs" Link="Core/Ansi.cs" />
+    <Compile Include="../../Source/Core/AnsiStripper.cs" Link="Core/AnsiStripper.cs" />
   </ItemGroup>
 
 </Project>

@@ -401,7 +401,10 @@ public partial class MainWindow
         if (string.IsNullOrEmpty(text))
             return string.Empty;
 
-        return Core.AnsiCodes.NormalizeTerminalText(text)
+        // Strip escape sequences at this choke point: upstream stripping can leave
+        // fragments when a packet ends mid-sequence (partial prompts) or misses
+        // non-CSI escapes. See AnsiCodes.StripTerminalSequences.
+        return Core.AnsiCodes.NormalizeTerminalText(Core.AnsiCodes.StripTerminalSequences(text))
             .Replace("\r", string.Empty, StringComparison.Ordinal)
             .TrimEnd('\n');
     }

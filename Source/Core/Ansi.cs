@@ -75,40 +75,36 @@ namespace TWXProxy.Core
 
         public static string StripANSI(string text)
         {
-            // Remove all ANSI/VT100 CSI escape sequences: ESC [ <params> <letter>
-            // This covers SGR colour codes (\x1B[1;33m), cursor movement (\x1B[H,
-            // \x1B[2J, \x1B[1;1H), erase (\x1B[K), etc.  TW2002 uses many of these
-            // and the old regex only stripped codes ending in 'm', leaving cursor/
-            // clear codes intact and mangling text like "Long Range Scan".
-            return System.Text.RegularExpressions.Regex.Replace(text, @"\x1B\[[0-9;]*[A-Za-z]", string.Empty);
+            // Remove CSI escape sequences only: ESC [ <params> <letter>.
+            // This is the script-facing STRIPANSI command (ScriptCmdImpl.CmdStripANSI):
+            // its contract is deliberately narrow and stable — OSC titles, non-CSI
+            // escapes and incomplete fragments are NOT stripped here.  Text-only
+            // consumers (line builder, agent feed) use AnsiStripper via
+            // StripTerminalSequences, which handles the full ECMA-48 grammar.
+            return RxCsiSequence.Replace(text, string.Empty);
         }
 
-        public static string StripANSIStateful(string text, ref bool inAnsi)
+        // Kept only for StripANSI: the script-facing STRIPANSI command is a
+        // documented CSI-only stripper and must not start stripping OSC titles,
+        // non-CSI escapes, or incomplete fragments (that is StripTerminalSequences'
+        // job, now handled by the AnsiStripper state machine).
+        private static readonly System.Text.RegularExpressions.Regex RxCsiSequence =
+            new(@"\x1B\[[0-9;]*[A-Za-z]", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// Removes ANSI/VT sequences from terminal text for text-only consumers such as
+        /// the game agent.  Implemented by the <see cref="AnsiStripper"/> state machine:
+        /// full CSI grammar (including '?" params, space intermediates, tilde finals and
+        /// the C1 0x9B introducer), OSC/DCS/SOS/PM/APC string sequences, two- and
+        /// three-char escapes, CAN/SUB aborts, and the full C1 zone.  Control
+        /// characters (BEL, NUL) are dropped; CR/LF/backspace/HT are preserved for
+        /// the caller's normalizer.
+        /// </summary>
+        /// <param name="text">Raw terminal text, possibly still containing escape sequences</param>
+        /// <returns>Text with all escape sequences removed</returns>
+        public static string StripTerminalSequences(string text)
         {
-            if (string.IsNullOrEmpty(text))
-                return string.Empty;
-
-            var builder = new System.Text.StringBuilder(text.Length);
-
-            foreach (char ch in text)
-            {
-                if (ch == '\0' || ch == '\a')
-                    continue;
-
-                if (ch == '\x1B')
-                {
-                    inAnsi = true;
-                    continue;
-                }
-
-                if (!inAnsi)
-                    builder.Append(ch);
-
-                if (char.IsLetter(ch))
-                    inAnsi = false;
-            }
-
-            return builder.ToString();
+            return AnsiStripper.StripAll(text);
         }
 
         public static string NormalizeTerminalText(string text)

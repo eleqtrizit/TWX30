@@ -6,6 +6,41 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 var tests = new (string Name, Action Body)[]
 {
     ("Split ANSI sequence keeps ESC introducer", SplitAnsiSequenceKeepsEscIntroducer),
+    ("Strip terminal sequences removes full CSI codes", StripTerminalSequencesRemovesFullCsiCodes),
+    ("Strip terminal sequences removes incomplete trailing fragment", StripTerminalSequencesRemovesIncompleteTrailingFragment),
+    ("Strip terminal sequences removes non-CSI escapes", StripTerminalSequencesRemovesNonCsiEscapes),
+    ("Strip terminal sequences is a no-op on clean text", StripTerminalSequencesIsNoOpOnCleanText),
+    ("Strip terminal sequences preserves full prompt after split fragment", StripTerminalSequencesPreservesFullPromptAfterSplitFragment),
+    ("Strip terminal sequences handles empty and escape-only text", StripTerminalSequencesHandlesEmptyAndEscapeOnlyText),
+    ("Strip terminal sequences removes every fragment form", StripTerminalSequencesRemovesEveryFragmentForm),
+    ("Strip terminal sequences removes empty-parameter sequences", StripTerminalSequencesRemovesEmptyParameterSequences),
+    ("Strip terminal sequences removes many sequences on one line", StripTerminalSequencesRemovesManySequencesOnOneLine),
+    ("Strip terminal sequences strips OSC titles", StripTerminalSequencesStripsOscTitles),
+    ("Strip terminal sequences removes incomplete OSC fragment", StripTerminalSequencesRemovesIncompleteOscFragment),
+    ("Strip terminal sequences leaves literal bracket text alone", StripTerminalSequencesLeavesLiteralBracketTextAlone),
+    ("Strip terminal sequences removes control characters", StripTerminalSequencesRemovesControlCharacters),
+    ("Line builder strips sequences split across chunks", LineBuilderStripsSequencesSplitAcrossChunks),
+    ("Line builder reassembles sequence split after introducer", LineBuilderReassemblesSequenceSplitAfterIntroducer),
+    ("Line builder stops SGR bleed across lines", LineBuilderStopsSgrBleedAcrossLines),
+    ("Line builder emits partial prompt then completes it", LineBuilderEmitsPartialPromptThenCompletesIt),
+    ("Line builder splits sequence across three chunks", LineBuilderSplitsSequenceAcrossThreeChunks),
+    ("Line builder handles many lines in one chunk", LineBuilderHandlesManyLinesInOneChunk),
+    ("Line builder drops blank lines and trims CR", LineBuilderDropsBlankLinesAndTrimsCr),
+    ("Strip terminal sequences removes private-marker CSI", StripTerminalSequencesRemovesPrivateMarkerCsi),
+    ("Strip terminal sequences removes tilde-final CSI", StripTerminalSequencesRemovesTildeFinalCsi),
+    ("Strip terminal sequences removes colon-parameter CSI", StripTerminalSequencesRemovesColonParameterCsi),
+    ("Strip terminal sequences removes intermediate-byte CSI", StripTerminalSequencesRemovesIntermediateByteCsi),
+    ("Strip terminal sequences removes C1 introducer CSI", StripTerminalSequencesRemovesC1IntroducerCsi),
+    ("Strip terminal sequences is stable at every split position", StripTerminalSequencesStableAtEverySplitPosition),
+    ("Line builder applies destructive backspace", LineBuilderAppliesDestructiveBackspace),
+    ("Line builder force-flushes runaway partial line", LineBuilderForceFlushesRunawayPartialLine),
+    ("Line builder survives byte-at-a-time feeding", LineBuilderSurvivesByteAtATimeFeeding),
+    ("AnsiStripper stateful streaming fixes tilde-final swallow", AnsiStripperStatefulStreamingFixesTildeFinalSwallow),
+    ("AnsiStripper statefully consumes sequence split across calls", AnsiStripperStatefullyConsumesSequenceSplitAcrossCalls),
+    ("AnsiStripper aborts sequence on CAN and SUB", AnsiStripperAbortsSequenceOnCanAndSub),
+    ("AnsiStripper dispatches C1 introducers and drops C1 zone", AnsiStripperDispatchesC1IntroducersAndDropsC1Zone),
+    ("AnsiStripper consumes DCS until ST", AnsiStripperConsumesDcsUntilSt),
+    ("AnsiStripper consumes OSC with embedded ESC", AnsiStripperConsumesOscWithEmbeddedEsc),
     ("Standalone ESC echo drops only ESC", StandaloneEscEchoDropsOnlyEsc),
     ("Native MomBot saved backdoor flag resolves startup backdoor", NativeMombotSavedBackdoorFlagResolvesStartupBackdoor),
     ("Native MomBot script booleans are numeric", NativeMombotScriptBooleansAreNumeric),
@@ -948,6 +983,466 @@ static void ProxyManagementRemovesServersFromSnapshotList()
     int removeAt = source.IndexOf("_preferences.ProxyServers.RemoveAt(removedIndex);", StringComparison.Ordinal);
     if (clearSelection < 0 || removeAt < 0 || clearSelection > removeAt)
         throw new InvalidOperationException("Expected proxy server removal to clear UI selection before mutating preferences.");
+}
+
+static void StripTerminalSequencesRemovesFullCsiCodes()
+{
+    string actual = TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[1;33mBusted.\x1B[0m\x1B[2J\x1B[H");
+    AssertText(actual, "Busted.");
+}
+
+static void StripTerminalSequencesRemovesIncompleteTrailingFragment()
+{
+    // Packet ends mid-sequence: agent must not see "\x1B[1;3"
+    string actual = TWXProxy.Core.AnsiCodes.StripTerminalSequences("Command [TL=-1] (\x1B[1;3");
+    AssertText(actual, "Command [TL=-1] (");
+}
+
+static void StripTerminalSequencesRemovesNonCsiEscapes()
+{
+    string actual = TWXProxy.Core.AnsiCodes.StripTerminalSequences("OK\x1B=\x1B(B\x1B" + "7done");
+    AssertText(actual, "OKdone");
+}
+
+static void StripTerminalSequencesIsNoOpOnCleanText()
+{
+    const string clean = "Command [TL=-1] (: ) [PA] ? [H] >>>";
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences(clean), clean);
+}
+
+static void StripTerminalSequencesPreservesFullPromptAfterSplitFragment()
+{
+    // First chunk: color intro cut mid-sequence.  Second chunk: rest of the
+    // sequence plus the prompt.  The combined text must survive stripping.
+    string first = TWXProxy.Core.AnsiCodes.StripTerminalSequences(" >>> \x1B[1;3");
+    string second = TWXProxy.Core.AnsiCodes.StripTerminalSequences("3mCommand [TL=");
+    AssertText(first, " >>> ");
+    AssertText(second, "3mCommand [TL=");
+    // No escape sequences may survive; the "3m" remnant is plain visible text.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences(first + second), " >>> 3mCommand [TL=");
+}
+
+static void StripTerminalSequencesRemovesPrivateMarkerCsi()
+{
+    // BBS servers send hide/show cursor with the '?' private marker.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[?25hshow\x1B[?25lhide"), "showhide");
+}
+
+static void StripTerminalSequencesRemovesTildeFinalCsi()
+{
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[3~del\x1B[1~home"), "delhome");
+}
+
+static void StripTerminalSequencesRemovesColonParameterCsi()
+{
+    // Wide-color with colon-separated subparameters.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[38:5:196mred\x1B[0m"), "red");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[38;5;196mred2"), "red2");
+}
+
+static void StripTerminalSequencesRemovesIntermediateByteCsi()
+{
+    // DECSCUSR sends a space intermediate before the final byte.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[1 qcursor"), "cursor");
+}
+
+static void StripTerminalSequencesRemovesC1IntroducerCsi()
+{
+    // Single-byte C1 CSI introducer (0x9B), no ESC present at all.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x9B" + "1;33mC1\x9B" + "0m"), "C1");
+    // Incomplete C1 fragment must also vanish.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x9B" + "1;3"), "A");
+}
+
+static void AnsiStripperStatefulStreamingFixesTildeFinalSwallow()
+{
+    // Live bug the regex-era StripANSIStateful had: it ended sequences on
+    // char.IsLetter, so a tilde-final CSI never closed and ate the next letter.
+    // New contract: streaming instance must return "AB".
+    TWXProxy.Core.AnsiStripper stripper = new();
+    AssertText(stripper.Strip("\x1B[3~"), "");
+    AssertText(stripper.Strip("AB"), "AB");
+
+    // Sequence state also holds across calls for incomplete fragments.
+    AssertText(stripper.Strip("\x1B[3~"), "");
+    stripper.Reset();
+    AssertText(stripper.Strip("clean"), "clean");
+}
+
+static void AnsiStripperStatefullyConsumesSequenceSplitAcrossCalls()
+{
+    TWXProxy.Core.AnsiStripper stripper = new();
+    AssertText(stripper.Strip("\x1B[1;3"), "");
+    AssertText(stripper.Strip("3mX"), "X");
+    // OSC split around the ST terminator.
+    AssertText(stripper.Strip("\x1B]0;T"), "");
+    AssertText(stripper.Strip("\x1B"), "");
+    AssertText(stripper.Strip("\\Y"), "Y");
+}
+
+static void AnsiStripperAbortsSequenceOnCanAndSub()
+{
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("A\x1B[1;\x18" + "B"), "AB");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("A\x1B[1;\x1A" + "B"), "AB");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("A\x1B\x18" + "B"), "AB");
+}
+
+static void AnsiStripperDispatchesC1IntroducersAndDropsC1Zone()
+{
+    // C1 introducers route into their sequence states.
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x9B" + "1;31mred\x9B" + "0m"), "red");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x9D" + "0;Title\x9C" + "after"), "after");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x90" + "payload\x9C" + "after"), "after");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x9E" + "pm\x9C" + "ok"), "ok");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x9F" + "apc\x9C" + "ok"), "ok");
+    // The rest of the C1 zone is non-printable and must not leak.
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("a\x85" + "b\x81" + "c"), "abc");
+}
+
+static void AnsiStripperConsumesDcsUntilSt()
+{
+    // DCS with ESC \ terminator, including an ESC-escaped payload byte.
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x1BP1$q\x1B\\tail"), "tail");
+    // SOS / PM / APC likewise.
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x1BXsospayload\x1B\\ok"), "ok");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x1B^pmpayload\x1B\\ok"), "ok");
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x1B_apcpayload\x1B\\ok"), "ok");
+    // Unterminated DCS payload is swallowed to the end of the chunk.
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("head\x1BPmid"), "head");
+}
+
+static void AnsiStripperConsumesOscWithEmbeddedEsc()
+{
+    // Regex-era hole: an ESC inside the OSC payload terminated the regex match
+    // early and leaked the remainder of the title as visible text.  The machine
+    // treats the embedded ESC as a sequence start and the title text never
+    // escapes into the output.
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("\x1B]0;Se\x1B[31mcret\x07" + "done"), "done");
+    // Payload before an OSC that never terminated must not leak either.
+    AssertText(TWXProxy.Core.AnsiStripper.StripAll("head\x1B]2;Open"), "head");
+}
+
+static void LineBuilderAppliesDestructiveBackspace()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    // The game corrects itself with backspaces inside a partial prompt; the
+    // stripped form must reflect the final visible text.
+    byte[] data = Encoding.Latin1.GetBytes("Abc\bX\r\n");
+    builder.Feed(data, data.Length);
+
+    if (lines.Count != 1)
+        throw new InvalidOperationException($"Expected 1 line, got {lines.Count}.");
+    AssertText(lines[0], "AbX");
+}
+
+static void LineBuilderForceFlushesRunawayPartialLine()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    // A stream that never terminates a line must not grow the buffer without
+    // bound; the partial is force-emitted once it exceeds the cap.
+    const int cap = 131_072;
+    byte[] filler = Encoding.Latin1.GetBytes(new string('x', 8_192) + "\x1B[31m\x1B[0m");
+    int fed = 0;
+    while (fed <= cap + 16_384)
+    {
+        builder.Feed(filler, filler.Length);
+        fed += filler.Length;
+        if (lines.Count > 0)
+            break;
+    }
+
+    if (lines.Count == 0)
+        throw new InvalidOperationException("Runaway partial line was never force-flushed.");
+    if (lines[^1].Length > cap + 8_192)
+        throw new InvalidOperationException($"Force-flushed line too long: {lines[^1].Length}.");
+}
+
+static void LineBuilderSurvivesByteAtATimeFeeding()
+{
+    // The exhaustive version of the split-position test: every byte is its own
+    // packet.  Every possible sequence-fragment shape appears as a partial
+    // event, so no event may contain escape data, and the complete lines must
+    // still come out in order.
+    const string stream = "\x1B[0;36mCom\x1B[0mmand\x1B]0;title\x07>\x1B[?25h\r\n\x1B[1;32mSect\x9B" + "1;33m has\x1B[3~ 3 warps\r\n";
+    const string line1 = "Command>";
+    const string line2 = "Sect has 3 warps";
+
+    byte[] bytes = Encoding.Latin1.GetBytes(stream);
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    for (int i = 0; i < bytes.Length; i++)
+    {
+        byte[] one = [bytes[i]];
+        builder.Feed(one, 1);
+    }
+
+    foreach (string line in lines)
+    {
+        if (line.Contains('\x1B', StringComparison.Ordinal) || line.Contains('\x9B', StringComparison.Ordinal) ||
+            line.Contains("?25", StringComparison.Ordinal) || line.Contains("0;title", StringComparison.Ordinal) ||
+            line.Contains("1;33m", StringComparison.Ordinal) || line.Contains("[3~", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Byte-at-a-time feeding leaked escape data: '{line}'.");
+        }
+    }
+
+    int line1Idx = lines.IndexOf(line1);
+    int line2Idx = line1Idx >= 0 ? lines.IndexOf(line2, line1Idx + 1) : -1;
+    if (line1Idx < 0 || line2Idx < 0)
+        throw new InvalidOperationException(
+            $"Byte-at-a-time feeding lost complete lines. Last events: {string.Join(" | ", lines.TakeLast(6))}");
+}
+
+static void StripTerminalSequencesStableAtEverySplitPosition()
+{
+    // Property test: with a realistic two-line colored prompt stream, no split
+    // position may leak an escape byte into a stripped event, and the complete
+    // lines must always come out in order.  (Chunk boundaries legitimately
+    // produce extra partial prompt events between the complete lines, so we
+    // check a subsequence, not list equality.)
+    const string stream = "\x1B[0;36mCommand\x1B[0m [TL=\x1B[1;31m-1\x1B[0m] (\x1B[?25h\r\n\x1B]2;Title\x07\x1B[1;32mSector 1\x9B" + "0m has \x1B[38:5:196m3\x1B[3~ warps\r\n";
+    const string line1 = "Command [TL=-1] (";
+    const string line2 = "Sector 1 has 3 warps";
+
+    byte[] bytes = Encoding.Latin1.GetBytes(stream);
+
+    for (int split = 1; split < bytes.Length; split++)
+    {
+        byte[] first = bytes[..split];
+        byte[] second = bytes[split..];
+
+        TelnetLineBuilder builder = new();
+        List<string> lines = [];
+        builder.TextLineReceived += line => lines.Add(line);
+        builder.Feed(first, first.Length);
+        builder.Feed(second, second.Length);
+
+        foreach (string line in lines)
+        {
+            if (line.Contains('\x1B', StringComparison.Ordinal) || line.Contains('\x9B', StringComparison.Ordinal) ||
+                line.Contains("\x1B[", StringComparison.Ordinal) || line.Contains("?25", StringComparison.Ordinal) ||
+                line.Contains("196m", StringComparison.Ordinal) || line.Contains("2;Title", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Split at byte {split} leaked escape data into a stripped event: '{line}'.");
+            }
+        }
+
+        // Both complete lines must appear, in order, as a subsequence.
+        int line1Idx = lines.IndexOf(line1);
+        int line2Idx = line1Idx >= 0 ? lines.IndexOf(line2, line1Idx + 1) : -1;
+        if (line1Idx < 0 || line2Idx < 0)
+            throw new InvalidOperationException(
+                $"Split at byte {split}: complete lines missing or out of order. Events: {string.Join(" | ", lines)}");
+    }
+}
+
+static void StripTerminalSequencesHandlesEmptyAndEscapeOnlyText()
+{
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences(""), "");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B"), "");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B["), "");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[1;33m\x1B[0m"), "");
+}
+
+static void StripTerminalSequencesRemovesEveryFragmentForm()
+{
+    // Every partial-sequence shape a packet boundary can produce must vanish.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B"), "A");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B["), "A");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B[1"), "A");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B[1;"), "A");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B[1;33"), "A");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B]"), "A");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B]0;Sect"), "A");
+}
+
+static void StripTerminalSequencesRemovesEmptyParameterSequences()
+{
+    // ESC[m is valid CSI with an omitted parameter list.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[mreset\x1B[m"), "reset");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[Kclear"), "clear");
+    // Final byte may be any letter, not just 'm': cursor moves, erase, etc.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[5Dback\x1B[1Aup\x1B[2J"), "backup");
+}
+
+static void StripTerminalSequencesRemovesManySequencesOnOneLine()
+{
+    string actual = TWXProxy.Core.AnsiCodes.StripTerminalSequences(
+        "\x1B[0;36mCommand\x1B[0m [TL=\x1B[1;31m-1\x1B[0m] (\x1B[0m");
+    AssertText(actual, "Command [TL=-1] (");
+}
+
+static void StripTerminalSequencesStripsOscTitles()
+{
+    // OSC window-title sequences terminated by BEL and by ST.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B]0;Trade Wars\x07prefix"), "prefix");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B]2;Other\x1B\\suffix"), "suffix");
+}
+
+static void StripTerminalSequencesRemovesIncompleteOscFragment()
+{
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("A\x1B]0;Trade"), "A");
+}
+
+static void StripTerminalSequencesLeavesLiteralBracketTextAlone()
+{
+    // Text that merely looks like parameter data must survive intact.
+    const string text = "Long Range Scan [1;33m] sector [36";
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences(text), text);
+    // Real escape before similar text must strip only the escape.
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("\x1B[1;33m[1;33m"), "[1;33m");
+}
+
+static void StripTerminalSequencesRemovesControlCharacters()
+{
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences("be\x07ll\0nul"), "bellnul");
+}
+
+static void LineBuilderStripsSequencesSplitAcrossChunks()
+{
+    TelnetLineBuilder builder = new();
+    List<(string Raw, string Stripped)> lines = [];
+    builder.TextLineAnsiReceived += (raw, stripped) => lines.Add((raw, stripped));
+
+    // Chunk 1 ends mid-GRS color sequence; chunk 2 completes it and the line.
+    byte[] first = Encoding.Latin1.GetBytes(" >>> \x1B[1;3");
+    builder.Feed(first, first.Length);
+    byte[] second = Encoding.Latin1.GetBytes("3mCommand [TL=-1] (: ) [PA] ? [H]\r\n");
+    builder.Feed(second, second.Length);
+
+    if (lines.Count != 2)
+        throw new InvalidOperationException($"Expected 2 events (partial + complete), got {lines.Count}.");
+    AssertText(lines[0].Stripped, " >>> ");
+    AssertText(lines[^1].Stripped, " >>> Command [TL=-1] (: ) [PA] ? [H]");
+    // Raw form keeps the escape codes for session logging.
+    string joined = string.Concat(lines.Select(l => l.Raw));
+    if (!joined.Contains("\x1B[1;3", StringComparison.Ordinal))
+        throw new InvalidOperationException($"Raw lines lost split sequence: '{joined}'.");
+}
+
+static void LineBuilderReassemblesSequenceSplitAfterIntroducer()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    // Split immediately after ESC [ — the introducer arrives alone. The raw
+    // partial keeps the fragment; the agent-level stripper must remove it.
+    byte[] first = Encoding.Latin1.GetBytes("scan\x1B[");
+    builder.Feed(first, first.Length);
+    byte[] second = Encoding.Latin1.GetBytes("2Kmore\r\n");
+    builder.Feed(second, second.Length);
+
+    if (lines.Count != 2)
+        throw new InvalidOperationException($"Expected 2 events (partial + complete), got {lines.Count}.");
+    AssertText(TWXProxy.Core.AnsiCodes.StripTerminalSequences(lines[0]), "scan");
+    AssertText(lines[^1], "scanmore");            // completed line, sequence gone
+    if (lines[^1].Contains('\x1B', StringComparison.Ordinal))
+        throw new InvalidOperationException("Completed line still contains an ESC byte.");
+}
+
+static void LineBuilderStopsSgrBleedAcrossLines()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    // A color set at the start of line one must not corrupt line two's text.
+    byte[] data = Encoding.Latin1.GetBytes("\x1B[1;33mSector 1 has 3 warps\r\nSector 2 is unexplored\r\n");
+    builder.Feed(data, data.Length);
+
+    if (lines.Count != 2)
+        throw new InvalidOperationException($"Expected 2 lines, got {lines.Count}.");
+    AssertText(lines[0], "Sector 1 has 3 warps");
+    AssertText(lines[1], "Sector 2 is unexplored");
+}
+
+static void LineBuilderEmitsPartialPromptThenCompletesIt()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    byte[] promptBytes = Encoding.Latin1.GetBytes("Command [TL=-1] (: ) [PA] ? [H]");
+    builder.Feed(promptBytes, promptBytes.Length);
+    if (lines.Count != 1)
+        throw new InvalidOperationException($"Partial prompt not emitted, got {lines.Count} events.");
+    AssertText(lines[0], "Command [TL=-1] (: ) [PA] ? [H]");
+
+    // The reply completes the prompt line: the event carries the buffered
+    // prompt text plus the new tail. The color-only blank line is dropped.
+    byte[] tail = Encoding.Latin1.GetBytes(" >\r\n\x1B[0;36m\r\nready\r\n");
+    builder.Feed(tail, tail.Length);
+    if (lines[1] != "Command [TL=-1] (: ) [PA] ? [H] >")
+        throw new InvalidOperationException($"Expected completed prompt as second event, got '{lines[1]}'.");
+    AssertText(lines[2], "ready");
+}
+
+static void LineBuilderSplitsSequenceAcrossThreeChunks()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    byte[] c1 = Encoding.Latin1.GetBytes("A\x1B");
+    builder.Feed(c1, c1.Length);
+    byte[] c2 = Encoding.Latin1.GetBytes("[1;");
+    builder.Feed(c2, c2.Length);
+    byte[] c3 = Encoding.Latin1.GetBytes("33mB\x1B[0m\r\n");
+    builder.Feed(c3, c3.Length);
+
+    if (lines.Count != 3)
+        throw new InvalidOperationException($"Expected 3 events (two partials + complete), got {lines.Count}.");
+    AssertText(lines[^1], "AB");
+    if (lines[^1].Contains('\x1B', StringComparison.Ordinal))
+        throw new InvalidOperationException("Completed line still contains an ESC byte.");
+}
+
+static void LineBuilderHandlesManyLinesInOneChunk()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    // Five lines in a single chunk, mixed LF and CRLF endings, including a
+    // sequence mid-line and one split nowhere — all must come out in order.
+    builder.Feed(Encoding.Latin1.GetBytes("a\r\nb\nc\x1B[0md\r\ne\r\n"), 16);
+
+    if (lines.Count != 4)
+        throw new InvalidOperationException($"Expected 4 lines in one chunk, got {lines.Count}.");
+    AssertText(lines[0], "a");
+    AssertText(lines[1], "b");
+    AssertText(lines[2], "cd");
+    AssertText(lines[3], "e");
+}
+
+static void LineBuilderDropsBlankLinesAndTrimsCr()
+{
+    TelnetLineBuilder builder = new();
+    List<string> lines = [];
+    builder.TextLineReceived += line => lines.Add(line);
+
+    // Blank lines are never emitted; CR is consumed as a line terminator.
+    builder.Feed(Encoding.Latin1.GetBytes("\r\n\r\ntext\r\n"), 10);
+
+    if (lines.Count != 1)
+        throw new InvalidOperationException($"Expected only the non-blank line, got {lines.Count}.");
+    AssertText(lines[0], "text");
+}
+
+static void AssertText(string actual, string expected)
+{
+    if (!string.Equals(actual, expected, StringComparison.Ordinal))
+        throw new InvalidOperationException($"Expected '{expected}', got '{actual}' (codepoints: {string.Join(' ', actual.Select(c => ((int)c).ToString("X4")))})");
 }
 
 static void AssertLine(TerminalBuffer buffer, int row, string expected)

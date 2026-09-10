@@ -51,10 +51,8 @@ public sealed class TelnetClient : IDisposable
     private int _termCols = 80;
     private int _termRows = 24;
 
-    // Line buffering for ANSI-stripped text (feeds ShipInfoParser)
-    private readonly StringBuilder _lineBuf = new();
-    private static readonly Regex _rxAnsi =
-        new(@"\x1B\[[0-9;]*[A-Za-z]", RegexOptions.Compiled);
+    // Line extraction and ANSI stripping across chunks (feeds ShipInfoParser)
+    private readonly TelnetLineBuilder _lineBuilder = new();
 
     // Events
     public event Action?         Connected;
@@ -88,6 +86,8 @@ public sealed class TelnetClient : IDisposable
     {
         _buffer = buffer;
         _parser = parser;
+        _lineBuilder.TextLineReceived += line => TextLineReceived?.Invoke(line);
+        _lineBuilder.TextLineAnsiReceived += (raw, stripped) => TextLineAnsiReceived?.Invoke(raw, stripped);
     }
 
     // ── Connect / disconnect ───────────────────────────────────────────────
@@ -199,46 +199,12 @@ public sealed class TelnetClient : IDisposable
     /// strips ANSI codes from complete lines, and fires <see cref="TextLineReceived"/>.
     /// Partial lines (prompts without \n) are also fired so the parser can detect
     /// the Command prompt that terminates an "I" block.
+    /// Line extraction and stripping live in <see cref="TelnetLineBuilder"/>.
     /// </summary>
     private void FeedTextLines(byte[] data, int length)
     {
         if (TextLineReceived == null && TextLineAnsiReceived == null) return;
-        string text = Encoding.Latin1.GetString(data, 0, length);
-        _lineBuf.Append(text);
-
-        string buf = _lineBuf.ToString();
-        int start = 0;
-
-        for (int i = 0; i < buf.Length; i++)
-        {
-            if (buf[i] != '\n') continue;
-
-            // Extract up to (but not including) the \n
-            int lineEnd = i;
-            if (lineEnd > start && buf[lineEnd - 1] == '\r') lineEnd--;
-            string raw = buf[start..lineEnd];
-            string stripped = _rxAnsi.Replace(raw, string.Empty).TrimEnd('\r');
-            if (stripped.Length > 0)
-            {
-                TextLineAnsiReceived?.Invoke(raw, stripped);
-                TextLineReceived?.Invoke(stripped);
-            }
-            start = i + 1;
-        }
-
-        // Keep unprocessed remainder; fire it as a partial line (catches prompts)
-        string remainder = buf[start..];
-        _lineBuf.Clear();
-        if (remainder.Length > 0)
-        {
-            _lineBuf.Append(remainder);
-            string stripped = _rxAnsi.Replace(remainder, string.Empty).TrimEnd('\r');
-            if (stripped.Length > 0)
-            {
-                TextLineAnsiReceived?.Invoke(remainder, stripped);
-                TextLineReceived?.Invoke(stripped);
-            }
-        }
+        _lineBuilder.Feed(data, length);
     }
 
     // ── Telnet byte processor ──────────────────────────────────────────────

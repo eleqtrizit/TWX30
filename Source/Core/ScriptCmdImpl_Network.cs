@@ -347,7 +347,7 @@ namespace TWXProxy.Core
             EventHandler<DataReceivedEventArgs>? serverHandler = null;
             var serverLineBuf = new StringBuilder();
             var serverAnsiLineBuf = new StringBuilder();
-            bool serverScriptInAnsi = false;
+            var serverStripper = new AnsiStripper();
 
             serverHandler = (_, e) =>
             {
@@ -355,7 +355,7 @@ namespace TWXProxy.Core
                     return;
 
                 string ansiChunk = AnsiCodes.PrepareScriptAnsiText(e.Text);
-                string plainChunk = AnsiCodes.StripANSIStateful(ansiChunk, ref serverScriptInAnsi);
+                string plainChunk = serverStripper.Strip(ansiChunk);
 
                 if (ansiChunk.Length == 0 && plainChunk.Length == 0)
                     return;
