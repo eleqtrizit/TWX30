@@ -22,7 +22,28 @@ MTC ships an embedded MCP (Model Context Protocol) server that lets coding agent
 dotnet run --project Source/MTC/MTC.csproj -- --mcp --agent-mode
 ```
 
-`--mcp` opens the MCP endpoint on port `7623`; `--agent-mode` suppresses UI dialogs and enables server observation. Point an MCP client at `http://localhost:7623` (or use an MCP gateway) after the port is listening.
+`--mcp` opens the MCP endpoint at `http://<bind>:7623/mcp` (Streamable HTTP transport; default bind is `127.0.0.1`); `--agent-mode` suppresses UI dialogs and enables server observation.
+
+### Connecting a Client
+
+Any Streamable-HTTP MCP client (Claude Desktop, Cursor, Codex, etc.) can connect by pointing it at the endpoint URL:
+
+```json
+{
+  "mcpServers": {
+    "twx30": { "url": "http://localhost:7623/mcp" }
+  }
+}
+```
+
+The handshake is a standard MCP `initialize` POST, so you can also drive it directly:
+
+```bash
+curl -X POST http://localhost:7623/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
+```
 
 ### Tool Catalog
 
