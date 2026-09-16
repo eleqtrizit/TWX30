@@ -56,7 +56,16 @@ When you (the agent) need the MTC app running (e.g. to use the `mtc_*` tools):
    "mtc unavailable"; if a tool call fails with "Server mtc not available",
    call `mcp({ connect: "mtc" })` once, then retry.
 
-5. **NEVER set up respawn logic. This means:**
+5. **MCP endpoint location.** The MCP server is a Streamable HTTP endpoint at
+   `http://127.0.0.1:7623/mcp` (note the `/mcp` path). Generic MCP clients can
+   connect with:
+   ```json
+   { "mcpServers": { "twx30": { "url": "http://localhost:7623/mcp" } } }
+   ```
+   See the "Connecting a Client" section of the top-level `README.md` for a
+   curl `initialize` handshake example.
+
+6. **NEVER set up respawn logic. This means:**
    - No `while`/`until` loops that relaunch the app when it exits.
    - No watchdog/retry wrappers (`while true; do dotnet run ...; sleep N; done`).
    - No `dotnet watch` (`make debug`) for normal runs — it relaunches the app on
