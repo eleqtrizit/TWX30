@@ -423,6 +423,25 @@ internal sealed class MtcJsonRpcServer : IDisposable
             case "mtc.getMombotStatus":
                 return await _bridge.GetMombotStatusAsync().ConfigureAwait(false);
 
+            case "mtc.setMombotEnabled":
+            {
+                if (parameters is not { ValueKind: System.Text.Json.JsonValueKind.Object } objParameters
+                    || !objParameters.TryGetProperty("enabled", out _))
+                    throw new MtcRpcException(-32602, "enabled (boolean) is required.");
+                bool enable = ReadBool(parameters, "enabled", false);
+                return await _bridge.SetMombotEnabledAsync(enable).ConfigureAwait(false);
+            }
+
+            case "mtc.configureMombot":
+            {
+                return await _bridge.ConfigureMombotAsync(
+                    ReadString(parameters, "loginName", required: true),
+                    ReadString(parameters, "password", required: true),
+                    ReadString(parameters, "gameLetter", required: true),
+                    ReadString(parameters, "botName", required: false, allowEmpty: true) ?? "MomBot",
+                    ReadDouble(parameters, "delayMinutes", 0, 0, 240)).ConfigureAwait(false);
+            }
+
             case "mtc.sendMombotPage":
             {
                 string command = ReadString(parameters, "command", required: true);
@@ -531,6 +550,8 @@ internal sealed class MtcJsonRpcServer : IDisposable
                 "mtc.sendCommand",
                 "mtc.runMombotCommand",
                 "mtc.getMombotStatus",
+                "mtc.setMombotEnabled",
+                "mtc.configureMombot",
                 "mtc.sendMombotPage",
                 "mtc.runScript",
                 "mtc.stopScript",

@@ -75,6 +75,8 @@ internal sealed class MtcRpcBridge
     public required Func<string, bool, Task<MtcRpcActionResult>> SendCommandAsync { get; init; }
     public required Func<string, bool, double, Task<MtcRpcSendAndWaitResult>> SendAndWaitAsync { get; init; }
     public required Func<Task<MombotRpcStatusSnapshot>> GetMombotStatusAsync { get; init; }
+    public required Func<bool, Task<MtcRpcActionResult>> SetMombotEnabledAsync { get; init; }
+    public required Func<string, string, string, string, double, Task<MtcRpcActionResult>> ConfigureMombotAsync { get; init; }
     public required Func<string, double, Task<MtcRpcSendAndWaitResult>> SendMombotPageAsync { get; init; }
     public required Func<string, Task<MtcRpcActionResult>> RunMombotCommandAsync { get; init; }
     public required Func<string, Task<MtcRpcActionResult>> RunScriptAsync { get; init; }

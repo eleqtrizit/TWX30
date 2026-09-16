@@ -18,6 +18,9 @@ Build details, project layout, and tooling notes: see `Source/README.md`.
 
 ## Scripting references
 
+- `GAMEPLAY.md` — **write gameplay tips here as the user gives them** (game commands, economy, secrets like `V` for stardock location).
+- `GAMEPLAY_MOMBOT.md` — session notes on driving the game via the MTC client / MOMBot; keep updated as bot behaviors are learned.
+
 - `TWX_SCRIPTING_GUIDE.md` — guide to the TWX script language (commands, syntax, triggers) and how it executes in TWXProxy. Read before writing or debugging `.ts`/`.cts` scripts.
 - `SCRIPT_INVENTORY.md` — one-line description of every bundled script in `scripts/` (Pack1/Pack2, LoneStar, Promethius, RammaR, Oz, mombot suite) and the shared `include/` libraries. Consult it to find an existing script or helper before authoring a new one.
 - `MOMBOT.md` — MOMBot (Mind Over Matter Bot) agent reference: how to address the bot (self/subspace/private routes), its modes, full command catalog, daemons, and the MCP tools (`mombot_status`, `send_mombot_page`, `run_mombot_command`) used to control it. Read this before driving the bot via MCP.
@@ -42,11 +45,18 @@ When you (the agent) need the MTC app running (e.g. to use the `mtc_*` tools):
    ```
    A check right after launch will show nothing; that's the build, not a failure.
 
-3. **Refresh the MCP gateway after a restart.** The gateway can cache
+3. **Wait for the port fast — poll, don't sleep.** Instead of `sleep 30`, poll
+   for the listener at 1s intervals and exit the moment it binds:
+   ```bash
+   for i in $(seq 1 60); do lsof -iTCP:7623 -sTCP:LISTEN >/dev/null 2>&1 && { echo "port up after ~${i}s"; break; }; sleep 1; done
+   ```
+   This returns as soon as the app is ready (often ~1s with a warm build).
+
+4. **Refresh the MCP gateway after a restart.** The gateway can cache
    "mtc unavailable"; if a tool call fails with "Server mtc not available",
    call `mcp({ connect: "mtc" })` once, then retry.
 
-4. **NEVER set up respawn logic. This means:**
+5. **NEVER set up respawn logic. This means:**
    - No `while`/`until` loops that relaunch the app when it exits.
    - No watchdog/retry wrappers (`while true; do dotnet run ...; sleep N; done`).
    - No `dotnet watch` (`make debug`) for normal runs — it relaunches the app on

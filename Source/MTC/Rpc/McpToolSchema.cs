@@ -144,6 +144,34 @@ internal static class McpToolSchema
         },
         new()
         {
+            Name = "set_mombot_enabled",
+            Description = "Enable (start) or disable (stop) the native Mombot. Enable requires a live game connection and completed bot relog settings; you may have to wait for the bot's login sequence before paging it. Read mombot_status to verify.",
+            JsonRpcMethod = "mtc.setMombotEnabled",
+            ReadOnly = false,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["enabled"] = new("boolean", "true = start the mombot, false = stop it."),
+            },
+            RequiredParameters = ["enabled"],
+        },
+        new()
+        {
+            Name = "configure_mombot",
+            Description = "Write the native Mombot relog settings (login name, password, game letter) using the same path as the in-app relog dialog, mark the bot configured, and persist the game config. Run once before set_mombot_enabled; required only when the bot is not yet configured.",
+            JsonRpcMethod = "mtc.configureMombot",
+            ReadOnly = false,
+            Parameters = new Dictionary<string, McpToolParameter>
+            {
+                ["loginName"] = new("string", "Trader alias the bot logs in with (also used as the server name)."),
+                ["password"] = new("string", "TWGS account password for the login."),
+                ["gameLetter"] = new("string", "Game letter to enter on the TWGS menu, e.g. 'B'."),
+                ["botName"] = new("string", "Bot identity name (default 'MomBot')."),
+                ["delayMinutes"] = new("number", "Minutes to delay the bot's in-game start (0-240, default 0)."),
+            },
+            RequiredParameters = ["loginName", "password", "gameLetter"],
+        },
+        new()
+        {
             Name = "send_mombot_page",
             Description = "Send a Mombot command as an in-game subspace page (quote line addressed to the bot) through the game stream, and optionally collect the bot's response lines. Use this to control the running bot remotely. Use run_mombot_command instead for local (non-game-stream) native commands.",
             JsonRpcMethod = "mtc.sendMombotPage",

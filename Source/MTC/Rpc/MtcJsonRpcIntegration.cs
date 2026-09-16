@@ -132,6 +132,8 @@ public partial class MainWindow
             SendCommandAsync = SendMtcRpcCommandAsync,
             SendAndWaitAsync = SendMtcRpcSendAndWaitAsync,
             GetMombotStatusAsync = GetMtcRpcMombotStatusAsync,
+            SetMombotEnabledAsync = SetMtcRpcMombotEnabledAsync,
+            ConfigureMombotAsync = ConfigureMtcRpcMombotAsync,
             SendMombotPageAsync = SendMtcRpcMombotPageAsync,
             RunMombotCommandAsync = ExecuteGameAgentMombotCommandAsync,
             RunScriptAsync = RunMtcRpcScriptAsync,
@@ -298,6 +300,125 @@ public partial class MainWindow
                 GameConnected: _gameInstance?.IsConnected == true || _telnet.IsConnected,
                 ExternalBotName: _gameInstance?.ActiveBotName ?? string.Empty));
         });
+
+    /// <summary>Enables or disables the native Mombot for MCP/JSON-RPC clients: enable starts the
+    /// bot through the same internal start path the Bot menu uses (requires a connected game);
+    /// disable stops the running bot. Returns the resulting bot state in the action result.</summary>
+    private async Task<MtcRpcActionResult> SetMtcRpcMombotEnabledAsync(bool enable)
+    {
+        MTC.mombot.mombotStatusSnapshot initial = await InvokeMtcRpcUiAsync(() =>
+            Task.FromResult(_mombot.GetStatusSnapshot())).ConfigureAwait(false);
+
+        if (enable)
+        {
+            if (initial.Enabled)
+                return MtcRpcActionResult.Ok("Mombot is already running.", MombotStateFields(initial));
+
+            bool connected = await InvokeMtcRpcUiAsync(() =>
+                Task.FromResult(_gameInstance?.IsConnected == true || _telnet.IsConnected)).ConfigureAwait(false);
+            if (!connected)
+                return MtcRpcActionResult.Fail("Connect to server, first.");
+
+            bool configured = await InvokeMtcRpcUiAsync(() =>
+                Task.FromResult(IsNativeMombotConfiguredForStart())).ConfigureAwait(false);
+            if (!configured)
+                return MtcRpcActionResult.Fail("Native mombot is not configured; complete its relog settings in MTC first.");
+
+            await InvokeMtcRpcUiAsync(async () =>
+            {
+                await StartInternalMombotAsync(
+                    BuildCurrentGameNativeBotConfig(),
+                    requestedBotName: string.Empty,
+                    interactiveOfflinePrompt: false,
+                    publishMissingGameMessage: false).ConfigureAwait(true);
+                return string.Empty;
+            }).ConfigureAwait(false);
+        }
+        else
+        {
+            if (!initial.Enabled)
+                return MtcRpcActionResult.Ok("Mombot is not running.", MombotStateFields(initial));
+
+            await InvokeMtcRpcUiAsync(async () =>
+            {
+                await StopActiveBotAsync().ConfigureAwait(true);
+                return string.Empty;
+            }).ConfigureAwait(false);
+        }
+
+        MTC.mombot.mombotStatusSnapshot after = await InvokeMtcRpcUiAsync(() =>
+            Task.FromResult(_mombot.GetStatusSnapshot())).ConfigureAwait(false);
+
+        bool success = after.Enabled == enable;
+        string message = enable
+            ? success
+                ? $"Mombot started. sector={after.CurrentSector}"
+                : "Mombot start did not complete; check the MTC terminal for details."
+            : success
+                ? "Mombot stopped."
+                : "Mombot stop did not complete; check the MTC terminal for details.";
+        return success
+            ? MtcRpcActionResult.Ok(message, MombotStateFields(after))
+            : MtcRpcActionResult.Fail(message);
+    }
+
+    /// <summary>Configures the native Mombot relog settings for MCP/JSON-RPC clients: persists
+    /// login credentials (and optional bot name / start delay) through the same code path the
+    /// in-app relog dialog uses, marks the bot as configured, and saves the game config.</summary>
+    private async Task<MtcRpcActionResult> ConfigureMtcRpcMombotAsync(
+        string loginName,
+        string password,
+        string gameLetter,
+        string botName,
+        double delayMinutes)
+    {
+        if (string.IsNullOrWhiteSpace(loginName))
+            throw new MtcRpcException(-32602, "loginName is required.");
+        if (string.IsNullOrWhiteSpace(password))
+            throw new MtcRpcException(-32602, "password is required.");
+        string normalizedLetter = NormalizeGameLetter(gameLetter ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(normalizedLetter))
+            throw new MtcRpcException(-32602, "gameLetter is required.");
+
+        return await InvokeMtcRpcUiAsync(async () =>
+        {
+            string gameName = NormalizeGameName(_embeddedGameName);
+            if (string.IsNullOrWhiteSpace(gameName) || IsGeneratedPlaceholderGameName(gameName))
+                gameName = NormalizeGameName(GetDebugLogGameName());
+            if (string.IsNullOrWhiteSpace(gameName) || IsGeneratedPlaceholderGameName(gameName))
+                return MtcRpcActionResult.Fail("No game is selected; connect to a game first.");
+
+            _embeddedGameConfig ??= await LoadOrCreateEmbeddedGameConfigAsync(gameName).ConfigureAwait(true);
+            var relog = new MTC.mombot.mombotRelogDialogResult(
+                LoginType: MTC.mombot.mombotRelogLoginType.NormalRelog,
+                BotName: string.IsNullOrWhiteSpace(botName) ? "MomBot" : botName.Trim(),
+                ServerName: loginName.Trim(),
+                LoginName: loginName.Trim(),
+                Password: password.Trim(),
+                GameLetter: normalizedLetter,
+                DelayMinutes: Math.Clamp((int)delayMinutes, 0, 240),
+                AfterLoginAction: "none",
+                BotCommand: string.Empty,
+                MacroAfterLogin: string.Empty);
+            ApplyMombotRelogDialogResult(relog);
+            await SaveEmbeddedGameConfigAsync(gameName, _embeddedGameConfig).ConfigureAwait(true);
+
+            MTC.mombot.mombotStatusSnapshot snapshot = _mombot.GetStatusSnapshot();
+            return MtcRpcActionResult.Ok(
+                $"Mombot configured: login='{loginName.Trim()}' game='{normalizedLetter}'.",
+                MombotStateFields(snapshot));
+        }).ConfigureAwait(false);
+    }
+
+    private static Dictionary<string, string> MombotStateFields(MTC.mombot.mombotStatusSnapshot snapshot)
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["enabled"] = snapshot.Enabled ? "1" : "0",
+            ["autoStart"] = snapshot.AutoStart ? "1" : "0",
+            ["watcherEnabled"] = snapshot.WatcherEnabled ? "1" : "0",
+            ["mode"] = snapshot.Mode,
+            ["currentSector"] = snapshot.CurrentSector.ToString(),
+        };
 
     /// <summary>Sends an in-game subspace page command to the Mombot through the game stream
     /// (a quote line addressed to the bot name), then optionally collects the bot's response
